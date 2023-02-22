@@ -1,0 +1,16 @@
+{
+  "name": "HelpCall",
+  "version": "1.0",
+  "description": "Experimental extension for HelpCall's augmented steps display",
+  "permissions": ["activeTab", "storage"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "img/favicon.png"
+  },
+  "manifest_version": 3,
+  "content_scripts":[{
+    "matches":["http://*/*","https://*/*", "file:///*"],
+    "js":["script.js"],
+    "css":["style.css"]
+  }]
+}

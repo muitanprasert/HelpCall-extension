@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+      * {
+        font-family: 'Helvetica', 'Arial', sans-serif;
+        font-size: 15px;
+      }
+      body {
+        width: 21em;
+        padding: 0.5em;
+        background-color:#fdf8f2;
+      }
+      div {
+        width: 100%;
+      }
+      label {
+        float: left;
+        line-height: 20px;
+        color: black;
+      }
+      span {
+        display: block;
+        overflow: hidden;
+        padding: 0 4px 0 6px
+      }
+      input {
+        width: 11em;
+        float: right;
+        outline: 0;
+        border-width: 0 0 1px;
+        border-color: #61187c;
+        background-color: transparent;
+      }
+      input:focus {
+        border-color: black;
+      }
+      button {
+        height: 2.5em;
+        width: 100%;
+        font-size: 13px;
+        display: inline-block;
+        outline: none;
+        cursor: pointer;
+        font-weight: 500;
+        border-radius: 3px;
+        padding: 0 15px;
+        border-radius: 4px;
+        color: #61187c;
+        background: transparent;
+        line-height: 1.2;
+        word-spacing: 0px;
+        letter-spacing: .0892857143em;
+        text-decoration: none;
+        text-transform: uppercase;
+        border: 1px solid #61187c;
+        text-align: center;
+        font-weight: bold;
+      }
+      button:hover {
+        background: #f0e7f1;
+      }
+      ul {
+        margin: 7px 0;
+        list-style-position: outside;
+        padding-left: 1em;
+        width: 100%;
+      }
+      li {
+        margin: 4px 0;
+        cursor: pointer;
+      }
+      summary {
+        cursor: pointer;
+        margin: 2px 0;
+      }
+      .inline-button {
+        background:#61187c;
+        color:white;
+      }
+      .inline-button:hover {
+        background: #430c57;
+      }
+      .section-heading {
+        font-weight: bold;
+        letter-spacing: .0892857143em;
+        margin: 2px 0;
+        overflow-wrap: break-word;
+        word-wrap: break-word;
+      }
+      .guide-options {
+        margin-top:4px;
+        margin-bottom:7px;
+        text-align: center;
+      }
+      .inline-option {
+        font-weight: normal;
+        width: auto;
+        display:inline-block;
+        background:transparent;
+        color:black;
+        border-color: black;
+        margin: 0 3px;
+      }
+      .inline-option:hover {
+        background: #f0e7f1;
+      }
+
+    </style>
+  </head>
+  <body>
+    <div id="recorded-div">
+      <p class="section-heading" style="color:#61187c" id="guide-heading">This page's guides:</p>
+      <div id="saved-steps" style="margin-top: 6px;"></div>
+      <hr>
+    </div>
+    <div id="guide-name" style="margin-bottom:3px; display:none;">
+      <label for="enter-guide-name">Save as</label>
+      <input type="text" id="enter-guide-name" placeholder="how to install chrome">
+    </div>
+    <div id="after-stop" style="text-align:center; display:none; margin:2px 0 8px 0;">
+      <button class="inline-button" id="save-button" style="width:56%; float:left;">Save Steps</button>
+      <button class="inline-button" id="discard-button" style="width:41%; float:right;">Discard</button>
+    </div>
+    <button id="delimiter">Start recording</button>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

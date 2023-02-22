@@ -1,0 +1,38 @@
+{
+  "Making a new tweet": {
+    "1":{
+      "url":"https://twitter.com/home",
+      "loc":{
+        "x": 10.5,
+        "y": 100,
+        "dir": 0
+      },
+      "desc":"Click <i>Tweet</i> button"
+    },
+    "2":{
+      "url":"https://twitter.com/compose/tweet",
+      "loc":{
+        "x": 200,
+        "y": 100,
+        "dir": 0
+      },
+      "desc":"Click textbox"
+    }
+  },
+  "Creating a new calendar": {
+    "1":{
+      "url":"https://calendar.google.com",
+      "loc":{
+        "x": 10.5,
+        "y": 100,
+        "dir": 0
+      },
+      "desc":"Click <i>New Event</i>"
+    }
+  },
+  "mode":"write",
+  "num":1,
+  "1":[
+    1,2,3
+  ]
+}

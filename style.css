@@ -1,0 +1,44 @@
+.HelpCall {
+    font-family: 'Helvetica', 'Arial', sans-serif;
+    cursor: pointer;
+}
+
+.closedTT {
+    position:relative;
+    left: 51px;
+}
+
+.closedTT-shape {
+    transform: rotate(180deg);
+    left: 0;
+}
+
+.closedTT-text {
+    position:absolute;
+    left: 0;
+    top:0;
+    width:36px;
+    text-align:center;
+    font-size:20px;
+    line-height:40px;
+    color:#fffae7;
+    margin:0;
+    font-weight: bold;
+}
+
+.openTT {
+    position:absolute;
+    left: 0;
+    bottom: 18px;
+    z-index: 1000001;
+    text-align: center;
+    margin: 0 auto;
+    padding: 6px;
+    background-color: #fffae7;
+    color: #61187c;
+    border: 3px solid #61187c;
+    border-radius: 5px;
+    font-size: 15px;
+    width: 140px;
+    display: none;
+}
