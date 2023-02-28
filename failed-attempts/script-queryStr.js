@@ -8,7 +8,7 @@ const interactive_nodes = {
     'embed':{ name:'embedded content' },
     'iframe':{ name:'embedded content' },
     'img':{ name:'image', attr: 'usemap'},
-    'input':{ name:'$[type] box' }, // type != hidden
+    'input':{ name:'$[type] field' }, // type != hidden
     'select':{ name: 'drop-down list'},
     'textarea':{ name: 'textbox'}
 } 
@@ -483,7 +483,7 @@ function generateDesc(obj, orig_obj, code){
     else if(eventType == 'r')
         desc = 'Right (secondary) click on'
     else if(eventType == 'k')
-        desc = 'Enter input into'
+        desc = 'Enter/select with'
     else if(eventType == 's'){
         // special case, no target desc (but positioned there)
         return 'Press  '+code;    // if e isn't passed we get an error
@@ -526,7 +526,7 @@ function findInteractiveRole(el){
         }
         if(nodeName == 'input'){
             if(!el.hasAttribute('type'))
-                return { elm: el, role:'text input field'};
+                return { elm: el, role:'text field'};
             if(el['type'] == 'hidden')
                 return { elm: target, role:''};
             return { elm: el, role: el['type'] + ' input field' };

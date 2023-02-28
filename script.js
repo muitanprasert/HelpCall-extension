@@ -8,7 +8,7 @@ const interactive_nodes = {
     'embed':{ name:'embedded content' },
     'iframe':{ name:'embedded content' },
     'img':{ name:'image', attr: 'usemap'},
-    'input':{ name:'$[type] box' }, // type != hidden
+    'input':{ name:'$[type] field' }, // type != hidden
     'select':{ name: 'drop-down list'},
     'textarea':{ name: 'textbox'}
 } 
@@ -70,6 +70,10 @@ document.addEventListener('contextmenu', function(e) {
 
 // helper function for any MOUSE event
 function recordEvent(e){
+    let queryStr = generateQueryStr(e.target);
+    //console.log(queryStr);
+    //console.log(document.querySelector(queryStr));
+
     let clone = e.target.cloneNode(true);
     clone.setAttribute('bounds', JSON.stringify(e.target.getBoundingClientRect()));
     e = e || window.event;
@@ -79,9 +83,32 @@ function recordEvent(e){
         absX: e.pageX,
         absY: e.pageY,
         eventType: 'c',    // default to c = click
-        code: null
+        code: null,
+        queryStr: queryStr
     }
     return thisEvent;
+}
+
+/**
+ * Generate queryStr for selector from a given node or its parent
+ * @param {Node} node 
+ * @return queryStr
+ */
+function generateQueryStr(node){
+    let parent = findInteractiveRole(node).elm;
+    if(parent !== null && node.innerText == undefined)
+        node = parent;
+    let queryStr = '';
+    while(node.parentElement != null){
+        let tempStr = node.nodeName.toLowerCase();
+        if(node.hasAttribute('id'))
+            tempStr += '[id="'+node['id']+'"]';
+        if(node.hasAttribute('class') && typeof node.className=="string" && !node.className.includes(' '))
+            tempStr += '[class="'+node.className+'"]';
+        queryStr = tempStr + ' ' + queryStr;
+        node = node.parentElement;
+    }
+    return queryStr;
 }
 
 // listen for key presses
@@ -91,13 +118,15 @@ document.addEventListener('keyup', function(e){
     let focus = document.activeElement;
     let clone = focus.cloneNode(true);
     clone.setAttribute('bounds', JSON.stringify(focus.getBoundingClientRect()));
+    let queryStr = generateQueryStr(focus);
     let thisEvent = {
         target: focus,
         cloned: clone,
         absX: 0,
         absY: 0,
         eventType: 's',
-        code: null
+        code: null,
+        queryStr: queryStr
     }
     new_event = true;
 
@@ -141,12 +170,13 @@ window.addEventListener('beforeunload', async (event) => {
  * @param {string} css Tooltip's CSS (static position)
  * @param {string} desc Tooltip's text description
 */ 
-function writeSessionTooltip(num, css, desc){
+function writeSessionTooltip(num, css, desc, queryStr){
     var obj = {}
     obj[num.toString()] = {
             "url":url,
             "desc":desc,
-            "css":css
+            "css":css,
+            "queryStr":queryStr
         }
     console.log("writing down", obj);
     setVariable(obj);
@@ -159,13 +189,15 @@ function writeSessionTooltip(num, css, desc){
  * @param {string} css Tooltip's CSS (static position)
  * @param {string} desc Tooltip's text description
  * @param {string} stepUrl URL associated with the Tooltip (to prevent errors from async functions & delays)
+ * @param {string} queryStr selectors for the target element
 */
-function injectTooltipHTML(num, css, desc, stepUrl){
+function injectTooltipHTML(num, css, desc, stepUrl, queryStr){
     let divID = 'HelpCall_'+num;
     var div = document.createElement('div');
     div.style.cssText = css;
     div.id = divID;
     div.className = "HelpCallTT";
+    div.setAttribute('data-querystr', queryStr);
 
     // add inner elements & event listener
     var divClosed = document.createElement('div')
@@ -223,8 +255,30 @@ function injectTooltipHTML(num, css, desc, stepUrl){
     div.appendChild(divOpen);
 
     // check right before actually injecting if it should still be injected
-    if(stepUrl == window.location.href && document.getElementById(divID) == null)
-        document.body.appendChild(div);
+    // if(stepUrl == window.location.href && document.getElementById(divID) == null) // url-based
+    document.body.appendChild(div);
+}
+
+/**
+ * Check if we can find a visible DOM from the given queryStr
+ * @param {string} queryStr 
+ */
+function visibleDOM(queryStr){
+    let targetElm = document.querySelector(queryStr);
+    return (targetElm != null && targetElm.offsetParent != null)
+}
+
+function setTooltipsVisibility(){
+    var TTs = document.querySelectorAll('div.HelpCallTT');
+    TTs.forEach(function(tt){
+        if(visibleDOM(tt.getAttribute('data-querystr'))){
+            tt.style.display = "inline-block";
+        }
+        else{
+            console.log("invisible", tt);
+            tt.style.display = "none";
+        }
+    });
 }
 
 /** 
@@ -233,13 +287,13 @@ function injectTooltipHTML(num, css, desc, stepUrl){
 async function onPageLoad(){
     console.log("PAGE LOADING");
     var mode = await readSessionStorage('mode');
-    if(mode == 'write' || mode == 'read'){
+    if((mode != undefined && mode.startsWith('write')) || mode == 'read'){
         let nextNum = Number(await readSessionStorage('num'));
         cleanSlate();
         for(let i=1; i<nextNum; i++){
             let curStep = await readSessionStorage(i.toString());
             if(curStep['url'] == window.location.href)
-                injectTooltipHTML(i, curStep.css, curStep.desc, curStep['url']);
+                injectTooltipHTML(i, curStep.css, curStep.desc, curStep['url'], curStep.queryStr);
         }
     }
 }
@@ -252,11 +306,12 @@ window.onload = onPageLoad;
  */
 chrome.storage.onChanged.addListener(async function(changes, _) {
     if('mode' in changes){
+        let oldMode = changes['mode']['oldValue'];
         let newMode = changes['mode']['newValue'];
-        if(newMode === 'sleep' || newMode === 'write'){
+        if(newMode === 'sleep' || (oldMode != 'write-paused' && newMode === 'write')){
             cleanSlate();
         }
-        else if(newMode === 'read'){
+        else if(newMode === 'read' || newMode === 'write-paused'){
             // assume the guide is in storage.session
             console.log("reading new guide", newMode)
             onPageLoad();
@@ -355,8 +410,8 @@ async function create_tooltip(e) {
     let result = findInteractiveRole(e.target, e.cloned);
     var desc = generateDesc(result, e);
     css = nodeToCSS(e.target, e.cloned, e.absX, absY=e.absY);
-    injectTooltipHTML(num, css, desc, url);
-    writeSessionTooltip(num, css, desc);
+    injectTooltipHTML(num, css, desc, url, e.queryStr);
+    writeSessionTooltip(num, css, desc, e.queryStr);
     setVariable({'num':num+1});
     alldone = true;
 }
@@ -395,6 +450,7 @@ var callback = function(mutations){
             url = window.location.href;
         }, 1000);
     }
+    setTooltipsVisibility();
 };
 var urlObserver = new MutationObserver(callback);
 urlObserver.observe(document.body, { childList: true, subtree: true });
@@ -506,7 +562,7 @@ function generateDesc(obj, e){
     else if(e.eventType == 'r')
         desc = 'Right (secondary) click on'
     else if(e.eventType == 'k')
-        desc = 'Enter input into'
+        desc = 'Enter/select with'
     else if(e.eventType == 's'){
         // special case, no target desc (but positioned there)
         return 'Press  '+e.code;    // if e isn't passed we get an error
@@ -551,7 +607,7 @@ function findInteractiveRole(el, initEl){
         }
         if(nodeName == 'input'){
             if(!el.hasAttribute('type'))
-                return { elm: el, role:'text input field'};
+                return { elm: el, role:'text field'};
             if(el['type'] == 'hidden')
                 return { elm: initEl, role:''};
             return { elm: el, role: el['type'] + ' input field' };

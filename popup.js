@@ -13,12 +13,11 @@ function switchState(){
         chrome.storage.session.set({'num':1});
     }
     else if(bt.textContent.startsWith("Stop")){
-        bt.textContent = "Resume recording";
-        document.getElementById("guide-name").style.display = "inline-block";
-        document.getElementById("after-stop").style.display = "inline-block";
+        setToPause();
     }
     else if(bt.textContent.startsWith("Resume")){
         bt.textContent = "Stop recording";
+        chrome.storage.session.set({'mode':'write'});
         hideAllDivs();
     }
     else if(bt.textContent.startsWith("Close")){
@@ -74,6 +73,9 @@ async function setState(){
     if(mode == "read"){
         setToRead();
     }
+    else if(mode == "write-paused"){
+        setToPause();
+    }
     else if(mode == "write"){
         bt.textContent = "Stop recording";
         hideAllDivs();
@@ -92,6 +94,17 @@ function setToRead(){
     hideAllDivs();
     document.getElementById("delimiter").textContent = "Close the guide"
     chrome.storage.session.set({"mode":"read"});
+}
+
+/**
+ * Set the popup's HTML and session storage's variables when changed to paused mode
+ */
+function setToPause(){
+    chrome.storage.session.set({"mode":"write-paused"});
+    document.getElementById("delimiter").textContent = "Resume recording";
+    document.getElementById("recorded-div").style.display = "none";
+    document.getElementById("guide-name").style.display = "inline-block";
+    document.getElementById("after-stop").style.display = "inline-block";
 }
 
 /**
