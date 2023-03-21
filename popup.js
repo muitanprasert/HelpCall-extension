@@ -108,6 +108,14 @@ function setToPause(){
 }
 
 /**
+ * Get the comparable part of the URL (e.g., before the query)
+ * @param {string} url
+ */
+function shortUrl(url){
+    return url.split("?")[0]
+}
+
+/**
  * Display recorded-div and populate saved-steps with guides in this tab
  */
 async function populateGuideList(){
@@ -124,7 +132,7 @@ async function populateGuideList(){
     let foundOne = false;
     let savedGuides = await listSavedGuides();
     for (const [gname, url] of Object.entries(savedGuides)){
-        if(thisUrl == url){
+        if(shortUrl(thisUrl) == shortUrl(url)){
             addGuideToList(gname);
             foundOne = true;
         }
@@ -133,7 +141,7 @@ async function populateGuideList(){
         document.getElementById("guide-heading").textContent = "This page's guides:"
     else{
         try{
-            document.getElementById("guide-heading").textContent = "No guides recorded in "+thisUrl.split("://")[1]+" yet."
+            document.getElementById("guide-heading").textContent = "No guides recorded in "+shortUrl(thisUrl)+" yet."
         }
         catch(e){
             document.getElementById("guide-heading").textContent = "No guides recorded in this page yet."

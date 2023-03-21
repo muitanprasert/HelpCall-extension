@@ -24,6 +24,245 @@ var url = window.location.href;
 var new_event = false;  // kept in case we wanna bring mutation observer back
 var alldone = true;
 
+// ======= OVERVIEW BAR =======
+// Modified from https://github.com/stefanvd/Browser-Extensions/blob/master/Proper-Menubar/Proper-Menubar-Edge-extension/js/content.js
+var taskchangepositiontop = false;
+
+var skipPositionedChild = function( node, style ) {
+    if ( this.offsetParent &&
+         this.offsetParent.tagName !== 'BODY') return true;
+    if ( hasPositionedParent(node) ) return true;
+    return false;
+};
+var hasPositionedParent = function( node ){
+    if ( node.tagName === 'BODY') return false;
+    var parent = node.parentNode;
+    if ( parent.tagName === 'BODY') return false; // added
+    var position = getComputedStyle(parent).position;
+    if (position !== 'static') {
+      return true;
+    }
+    return hasPositionedParent( parent );
+};
+
+/**
+ * Helper function to streamline DOM element creation
+ * @param {string} tag 
+ * @param {string} innerText 
+ * @param {object} attrs 
+ * @returns 
+ */
+function createDOMElement(tag, innerText, attrs){
+    let elm = document.createElement(tag);
+    elm.innerText = innerText;
+    for(a in attrs){
+        elm.setAttribute(a, attrs[a]);
+    }
+    return elm;
+}
+
+/**
+ * Add topbar and (try to) move every element in the page down regardless of its positioning style.
+ */
+let topbarHeight = '45px';
+let topbarHeightInt = parseInt(topbarHeight, 10);
+function addtopbar(){
+    var topbar = document.getElementById('HelpCall-topbar-div');
+    if(topbar){}
+    else{
+        var Children = document.body.getElementsByTagName("*");
+        for (var i = 0, len = Children.length; i < len; i++) {
+
+            if(Children[i].currentStyle){
+                var x = Children[i].currentStyle["position"];
+                var w = Children[i].currentStyle["margin-top"];
+                var v = Children[i].currentStyle["margin-bottom"];
+                var y = Children[i].currentStyle["top"];
+                var z = Children[i].currentStyle["bottom"];
+                var q = Children[i].currentStyle["height"];
+            }
+            else if(window.getComputedStyle){
+                var st = document.defaultView.getComputedStyle(Children[i], null);
+                var x = st.getPropertyValue("position");
+                var w = st.getPropertyValue("margin-top");
+                var v = st.getPropertyValue("margin-bottom");
+                var y = st.getPropertyValue("top");
+                var z = st.getPropertyValue("bottom");
+                var q = st.getPropertyValue("height");
+            }
+
+            const exemptSites = ["mail.google"];
+            if((x == "absolute" || x == "fixed") && y !== 'auto'){
+                // exempt some sites that we know force-changing position will break
+                let exempt = false;
+                exemptSites.forEach(site => {
+                    if(window.location.href.includes(site))
+                        exempt = true;
+                });
+
+                if(exempt)
+                    taskchangepositiontop = false;
+                else if (x === 'absolute' && skipPositionedChild(Children[i]) ) {
+                    taskchangepositiontop = false;
+                }else{
+                    if(x === 'fixed'){
+                        if(y != topbarHeight){
+                            taskchangepositiontop = true;
+                        }
+                    }else{
+                        taskchangepositiontop = true;   // absolute
+                    }
+                }
+
+                if(taskchangepositiontop == true){
+                    Children[i].setAttribute("data-helpcalltopbar",true);
+                    if(w != ""){
+                        Children[i].setAttribute("data-spmtop",w);
+                        Children[i].style.marginTop = parseInt(w, 10) + topbarHeightInt + "px";
+                    }else if(v != ""){
+                        Children[i].setAttribute("data-spmbottom",w);
+                        Children[i].style.marginBottom = parseInt(w, 10) + topbarHeightInt + "px";
+                    }
+
+                    // if "top" and "bottom" is 0 => then calc height
+                    if((q != "0px") && (y=="0px" && z=="0px")){
+                        Children[i].setAttribute("data-spmheight",q);
+                        Children[i].style.height = "calc( " + q + " - " + topbarHeight + ")";
+                    }
+                }
+            }
+
+        }
+        var divblock = createDOMElement("div", "", {"id":"HelpCall-topbar-block"});
+        document.body.prepend(divblock);
+
+        // Add content to the bar
+        var frame = createDOMElement("div", "", {'id':"HelpCall-topbar-div"});
+        frame.appendChild(createDOMElement("img", "", {"style":"height:25px; width:25px; padding:0 10px 0 0; float:left;", "src":"https://i.ibb.co/Sdt9nTc/favicon.png"}));
+        frame.appendChild(createDOMElement("span", "Showing guide tooltips: "));
+
+        let div = createDOMElement("div", "", {"id":"HelpCall-listOfTT"});
+        div.style.position = "relative";
+        frame.appendChild(div);
+
+        var toggle = createDOMElement("div", "", {"style":"float:right; width:265px; height:100%;"});
+        toggle.appendChild(createDOMElement("span", "Show tooltips on this page"));
+        var toggleLabel = createDOMElement("label", "", {"class":"switch"});
+        var toggleInput = createDOMElement("input", "", {"type":"checkbox"});
+        toggleInput.checked = true;
+        toggleInput.addEventListener('change', function() {
+            if (this.checked) {
+                setTooltipsVisibility();
+            } else {
+                setTooltipsVisibility(true); // hide all tooltips
+            }
+          });
+        toggleLabel.appendChild(toggleInput);
+        toggleLabel.appendChild(createDOMElement("span", "", {"class":"slider"}));
+        toggle.appendChild(toggleLabel);
+        
+        frame.appendChild(toggle);
+        document.documentElement.appendChild(frame);
+
+        updateBarTooltips();
+    }
+}
+
+/**
+ * Remove the topbar and move everything in the page back in place
+ */
+function removetoolbar(){
+	var checkb = document.getElementById('HelpCall-topbar-div');
+	if(checkb){
+		document.documentElement.removeChild(checkb);
+
+			var a = document.querySelectorAll('[data-helpcalltopbar]');
+
+			var a = document.body.getElementsByTagName("*");
+			for (var i = 0, len = a.length; i < len; i++) {
+					if(a[i].hasAttribute("data-spmtop")){
+						a[i].style.marginTop = a[i].getAttribute("data-spmtop");
+					}
+					if(a[i].hasAttribute("data-spmbottom")){
+						a[i].style.bottom = a[i].getAttribute("data-spmbottom");
+					}
+					if(a[i].hasAttribute("data-spmheight")){
+						a[i].style.height = a[i].getAttribute("data-spmheight");
+					}
+					a[i].setAttribute("data-helpcalltopbar",false);
+			}
+
+	}
+
+	var checkc = document.getElementById('HelpCall-topbar-block');
+	if(checkc){
+		document.body.removeChild(checkc);
+	}
+}
+
+/**
+ * Populate the HelpCall-listOfTT div, assuming it has been created
+ * Pretty expensive, should be used only for creation and tooltip deletion
+ */
+async function updateBarTooltips(){
+    let div = document.getElementById("HelpCall-listOfTT");
+    div.replaceChildren();
+    let nextNum = Number(await readSessionStorage('num'));
+    for(let i=1; i<nextNum; i++){
+        await addBarTooltip(i);
+    }
+    return div;
+}
+
+const grayedColor = "#99929B";
+const defaultColor = "#61187c";
+async function addBarTooltip(i){
+    let div = document.getElementById("HelpCall-listOfTT");
+    if(div == null || document.getElementById('HelpCall-bar_'+i) != null){
+        // failsafe: if it gets called when the bar list isn't there yet or that tooltip is already there, just abort.
+        return;
+    }
+    let obj = await readSessionStorage(i.toString());
+    var divClosed = document.createElement('div')
+    divClosed.className = "HelpCall HelpCall-barTT aboveTT";
+    divClosed.id = 'HelpCall-bar_'+i;
+    let color = "#61187c";
+    console.log('Creating bar tooltip HelpCall_'+i, document.getElementById('HelpCall_'+i));
+    if(document.getElementById('HelpCall_'+i) == null || document.getElementById('HelpCall_'+i).style.display == "none"){
+        color = grayedColor;
+        divClosed.style.cursor = "default";
+    }
+    divClosed.innerHTML = '<svg class="closedTT-shape" width="25px" \
+        viewbox="0 0 30 42"> \
+        <path stroke="#fffae7" fill="'+color+'" stroke-width="2" \
+        d="M15 3 \
+            Q16.5 6.8 25 18 \
+            A12.8 12.8 0 1 1 5 18 \
+            Q13.5 6.8 15 3z" /> \
+    </svg> \
+    <p class="closedTT-text">'+i+'</p>';
+    divClosed.addEventListener("mousedown", () => {
+        if(document.querySelector('#HelpCall-bar_1 path').getAttribute('fill') == defaultColor) // for some technical reason, "this" is undefined here
+            document.getElementById('HelpCall_'+i).scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    div.appendChild(divClosed);
+}
+async function updateColorBarTooltips(){
+    let nextNum = Number(await readSessionStorage('num'));
+    for(let i=1; i<nextNum; i++){
+        let thisTT = document.getElementById('HelpCall-bar_'+i);
+        if(document.getElementById('HelpCall_'+i) == null || document.getElementById('HelpCall_'+i).style.display == "none"){
+            thisTT.querySelector('path').fill = grayedColor;
+            thisTT.style.cursor = "default";
+        }
+        else{
+            thisTT.querySelector('path').fill = defaultColor;
+            thisTT.style.cursor = "pointer";
+        }
+    }
+}
+
 // ======= TOOLTIP EVENT LISTENERS =======
 
 // listen for clicks
@@ -33,7 +272,7 @@ document.addEventListener('click', function(e) {
     var thisEvent = recordEvent(e);
 
     // ignore if click in tooltip
-    if(inTooltip(e.target) != null){
+    if(e.clientY < topbarHeightInt || inTooltip(e.target) != null){
         e.stopPropagation();
         alldone = true;
     }
@@ -103,8 +342,10 @@ function generateQueryStr(node){
         let tempStr = node.nodeName.toLowerCase();
         if(node.hasAttribute('id'))
             tempStr += '[id="'+node['id']+'"]';
-        if(node.hasAttribute('class') && typeof node.className=="string" && !node.className.includes(' '))
-            tempStr += '[class="'+node.className+'"]';
+        if(node.hasAttribute('role') && typeof node.role =="string")
+            tempStr += '[role="'+node.role+'"]';
+        /*if(node.hasAttribute('class') && typeof node.className=="string" && !node.className.includes(' ')) // class changes too often
+            tempStr += '[class="'+node.className+'"]';*/
         queryStr = tempStr + ' ' + queryStr;
         node = node.parentElement;
     }
@@ -167,7 +408,7 @@ window.addEventListener('beforeunload', async (event) => {
  * Write new tooltip into session storage
  * 
  * @param {number} num Tooltip's number
- * @param {string} css Tooltip's CSS (static position)
+ * @param {tuple} css Tooltip's CSS (static position)
  * @param {string} desc Tooltip's text description
 */ 
 function writeSessionTooltip(num, css, desc, queryStr){
@@ -186,17 +427,22 @@ function writeSessionTooltip(num, css, desc, queryStr){
  * Inject HTML code of a tooltip (new or saved) into the page
  * 
  * @param {number} num Tooltip's number
- * @param {string} css Tooltip's CSS (static position)
+ * @param {tuple} style Tooltip's CSS and direction
  * @param {string} desc Tooltip's text description
  * @param {string} stepUrl URL associated with the Tooltip (to prevent errors from async functions & delays)
  * @param {string} queryStr selectors for the target element
 */
-function injectTooltipHTML(num, css, desc, stepUrl, queryStr){
+function injectTooltipHTML(num, style, desc, stepUrl, queryStr){
     let divID = 'HelpCall_'+num;
     var div = document.createElement('div');
-    div.style.cssText = css;
+    div.style.cssText = style[0];
     div.id = divID;
     div.className = "HelpCallTT";
+    if(style[1] == 0){
+        div.classList.add('aboveTT')
+    } else {
+        div.classList.add('belowTT')
+    }
     div.setAttribute('data-querystr', queryStr);
 
     // add inner elements & event listener
@@ -265,20 +511,24 @@ function injectTooltipHTML(num, css, desc, stepUrl, queryStr){
  */
 function visibleDOM(queryStr){
     let targetElm = document.querySelector(queryStr);
-    return (targetElm != null && targetElm.offsetParent != null)
+    if (targetElm != null && targetElm.offsetParent != null)
+        return true
+    let oneStepUp = document.querySelector(queryStr.split(' ').slice(0, -1).join(' '))
+    return (oneStepUp != null && oneStepUp.offsetParent != null)
 }
 
-function setTooltipsVisibility(){
+function setTooltipsVisibility(hideAll = false){
     var TTs = document.querySelectorAll('div.HelpCallTT');
     TTs.forEach(function(tt){
-        if(visibleDOM(tt.getAttribute('data-querystr'))){
+        if(!hideAll && visibleDOM(tt.getAttribute('data-querystr'))){
+            // console.log("visible", tt);
             tt.style.display = "inline-block";
         }
         else{
-            console.log("invisible", tt);
             tt.style.display = "none";
         }
     });
+    //updateColorBarTooltips();
 }
 
 /** 
@@ -292,12 +542,24 @@ async function onPageLoad(){
         cleanSlate();
         for(let i=1; i<nextNum; i++){
             let curStep = await readSessionStorage(i.toString());
-            if(curStep['url'] == window.location.href)
+            if(equivalentUrl(curStep['url'], window.location.href))
                 injectTooltipHTML(i, curStep.css, curStep.desc, curStep['url'], curStep.queryStr);
         }
+        addtopbar();
     }
 }
 window.onload = onPageLoad;
+
+/**
+ * Helper function that decides whether two URLs should be considered the same page
+ * For example, two google search results should be the same page even if their URLs differ
+ * IMPORTANT: has dependent functions in popup.js
+ * @param {string} url1 
+ * @param {string} url2 
+ */
+function equivalentUrl(url1, url2){
+    return url1.split("?")[0] == url2.split("?")[0]
+}
 
 /**
  * Listen to changes in session storage to:
@@ -314,8 +576,12 @@ chrome.storage.onChanged.addListener(async function(changes, _) {
         else if(newMode === 'read' || newMode === 'write-paused'){
             // assume the guide is in storage.session
             console.log("reading new guide", newMode)
-            onPageLoad();
+            await onPageLoad();
         }
+        if(newMode != 'sleep')
+            addtopbar();
+        else
+            removetoolbar();
     }
 
     // handle tooltip deletion
@@ -345,6 +611,7 @@ chrome.storage.onChanged.addListener(async function(changes, _) {
                 //console.log("UPDATED STEP", prevNum, await readSessionStorage(prevNum.toString()))
             }
         }
+        updateBarTooltips();    // clean out the bar tooltips and repopulate based on storage
     }
 });
 
@@ -409,9 +676,11 @@ async function create_tooltip(e) {
     console.log("creating tooltip on ", e.cloned);
     let result = findInteractiveRole(e.target, e.cloned);
     var desc = generateDesc(result, e);
-    css = nodeToCSS(e.target, e.cloned, e.absX, absY=e.absY);
-    injectTooltipHTML(num, css, desc, url, e.queryStr);
-    writeSessionTooltip(num, css, desc, e.queryStr);
+    style = nodeToCSS(e.target, e.cloned, e.absX, absY=e.absY);
+    console.log(style);
+    injectTooltipHTML(num, style, desc, url, e.queryStr);
+    addBarTooltip(num);
+    writeSessionTooltip(num, style, desc, e.queryStr);
     setVariable({'num':num+1});
     alldone = true;
 }
@@ -430,8 +699,8 @@ function nodeToCSS(node, cloned=null, absX=0, absY=0){
         var css = 'position:absolute; ';
     else
         var css = 'position:fixed; ';
-    css += 'z-index:1000000; left:'+loc.left+'px; top:'+loc.top+'px;';
-    return css;
+    css += 'z-index:1000000; left:'+loc.left+'px; top:'+loc.top+'px;'
+    return [css, loc.dir];
 }
 
 // ======= HELPER FUNCTIONS =======
@@ -464,7 +733,7 @@ urlObserver.observe(document.body, { childList: true, subtree: true });
 function inTooltip( elm ) {
     var i = 0;
     while(elm.parentNode && i<5){       // stop before document or 5 levels
-        if(elm.className == "HelpCallTT")
+        if(elm.classList.contains("HelpCallTT"))
             return elm;
         i++;
         elm = elm.parentNode;
@@ -495,21 +764,29 @@ function calcTooltipLoc( elm, cloned, absX, absY ) {
         maxY = document.documentElement.scrollHeight;
     }
 
+    let dir = 0;
     // if the dimension is unretrievable (e.g., with svg) or the element is too big, use mouse position instead
     if(dimensions.height == 0 && dimensions.width == 0 || 
         y - ttHeight < 0 && y + dimensions.height + ttHeight > maxY
         || elm === document.body){
-        return { top: absY, left: Math.max(0, absX - ttOffsetX - ttWidth/2), dir: 0}
+        y = absY;
+        x = Math.max(0, absX - ttOffsetX - ttWidth/2);
     }
     // place below the element
-    if(y - ttHeight < 0){
-        return { top: y + dimensions.height, left: x, dir: 1 };
+    else if(y - ttHeight < topbarHeightInt){
+        y = y + dimensions.height;
+        dir = 1;
     }
     // place above the element
-    while(overlap(x, y - ttHeight)){        // move right until it doesn't overlap with any tooltip
+    else{
+        y = y - ttHeight
+    }
+
+    // move right until it doesn't overlap with any tooltip
+    while(overlap(x, y)){        
         x += ttWidth/2;
     }
-    return { top: y - ttHeight, left: x, dir: 0 };
+    return { top: y, left: x, dir: dir };
 
     // TODO be more strategic with the positioning not to cover anything incl. other tooltips (or add some opacity with hover effects)
     // haven't really accounted for horizontal tts either

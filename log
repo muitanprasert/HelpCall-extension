@@ -1,9 +1,39 @@
+## 2023-03-21
+[todo] add mutationobserver back to ignore left-clicks that don't cause any mutation?
+
+
+## 2023-03-20
+implemented all of topbar's basic features
+[issue-5] topbar also appears but the layout is off on MDN website
+[issue-5] fixed google image problem by relaxing a condition in hasPositionedParent, needs to be further tested
+
+implemented url match relaxation. as a result, now google search (image, all, news, etc.) are all considered the same page, but their DOM structures are very different so the tooltips don't cross-appear anyways.
+
+[issue-6] [partial] modify calcTooltipLoc to account for the topbar and change its orientation if placed below the element. the placement still seems a little tight and clicking to open tooltips can get difficult.
+
+
+## 2023-03-14
+[issue-2] [partial] been attempting the unique identifier (queryStr) approach again over the past 2 weeks. finally got something to work! will need to be tested further to work out what attributes to save.
+[todo] see if it'd be a good idea to recompute tooltip location every time it's displayed
+
+[issue-4] haven't been able to replicate the issue after that day.
+
+partially implemented topbar
+[issue-5] topbar isn't appearing correctly on google image (other google pages work fine)
+
+[todo] implement new edit mode design:
+* hold ctrl+alt to bring up edit mode
+* every option & action need to be visual
+* deletion needs a confirmation box, since we're not allowing inserting tooltips in between (i.e., if they accidentally delete/miss a step, they have to start over)
+
+[issue-6] tooltip location's compute function needs to be adjusted to make sure they are never covered by the topbar.
+
 ## 2023-02-22
-[todo] 0 appears after deleting a tooltip!
+[issue-4] 0 appears after deleting a tooltip!
 
 ## 2023-02-21
 
-[unresolved-3] tried to find and save scrollable parent, but ran into a couple of roadblocks
+[issue-3] tried to find and save scrollable parent, but ran into a couple of roadblocks
 * attempt saved in script-scrollParent.jss
 * position will have to be recalculated. not sure how yet.
 * some elements have properties that prevent document.getDocumentById from finding it, so tooltips become non-interactive if placed in that kind of parent.
@@ -16,7 +46,7 @@
 
 [todo] if the cloned's text is empty ("this"), use its parent's
 
-[unresolved-2] [todo] try creating a 'unique identifier' from the entire parent hierarchy by nodeName and id/role if exists > probably would need to save the entire path (as queryStr) at cloning time (though cloning the entire body is probably way too expensive)
+[issue-2] next step: try creating a 'unique identifier' from the entire parent hierarchy by nodeName and id/role if exists > probably would need to save the entire path (as queryStr) at cloning time (though cloning the entire body is probably way too expensive)
 
 
 ## 2023-02-14
@@ -27,14 +57,14 @@
 
 [partial] addressed the issue of overlapping tooltips by moving right, but probably could be a bit more strategic
 
-[unresolved-1] tried to change the top div of tooltip to iframe but couldn't quite get the css to work yet
+[issue-1] tried to change the top div of tooltip to iframe but couldn't quite get the css to work yet
 * attempt saved in script-iframe.js
 * haven't figured out how to make the height adjust to divOpen's height. tried to get scrollHeight but it just returns 0.
 * the width is also fixed, so the entire divOpen's area is covering the page below even if the tooltip is closed.
 
 ## 2023-02-13
 
-[unresolved-2] failed to save the associated target element and use that to display tooltips
+[issue-2] failed to save the associated target element and use that to display tooltips
 * tried both the element itself and its interactive parent -- the latter seems to work a little better
 * tried to recalculate location based on the saved element, but it just appears to move to random places
 * the biggest roadblock is that classList can change, even for the same element in the same state, for big, dynamic websites like google calendar
@@ -46,5 +76,5 @@
 * the failed attempt is saved in script-queryStr.js
     * still only updates when url changes, no idea what trigger to use instead - mutationObserver?
 
-[unresolved-1] modal disappears when click on the tooltip (see google calendar)
+[issue-1] modal disappears when click on the tooltip (see google calendar)
 * tried preventDefault and stopPropagation if the clicked object is in tooltip, but doesn't help
