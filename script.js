@@ -171,7 +171,7 @@ function addtopbar(){
 /**
  * Remove the topbar and move everything in the page back in place
  */
-function removetoolbar(){
+function removetopbar(){
 	var checkb = document.getElementById('HelpCall-topbar-div');
 	if(checkb){
 		document.documentElement.removeChild(checkb);
@@ -272,7 +272,8 @@ document.addEventListener('click', function(e) {
     var thisEvent = recordEvent(e);
 
     // ignore if click in tooltip
-    if(e.clientY < topbarHeightInt || inTooltip(e.target) != null){
+    if((document.getElementById('HelpCall-topbar-div') && e.clientY < topbarHeightInt)
+            || inTooltip(e.target) != null){
         e.stopPropagation();
         alldone = true;
     }
@@ -503,24 +504,39 @@ function injectTooltipHTML(num, style, desc, stepUrl, queryStr){
     // check right before actually injecting if it should still be injected
     // if(stepUrl == window.location.href && document.getElementById(divID) == null) // url-based
     document.body.appendChild(div);
+
+    // add scroller
+    let target = visibleDOM(queryStr);
+    let scroller = getScrollParent(target);
+    if(scroller){
+        console.log(scroller);
+        scroller.addEventListener("scroll", (e) => {
+            console.log("scrolled", e);
+            let tt = document.getElementById(divID);
+            tt.style.marginLeft = (-1)*e.target.scrollLeft + 'px';
+            tt.style.marginTop = (-1)*e.target.scrollTop + 'px';
+        });
+    }
 }
 
 /**
- * Check if we can find a visible DOM from the given queryStr
+ * Find a visible DOM from the given queryStr
  * @param {string} queryStr 
  */
 function visibleDOM(queryStr){
     let targetElm = document.querySelector(queryStr);
     if (targetElm != null && targetElm.offsetParent != null)
-        return true
+        return targetElm
     let oneStepUp = document.querySelector(queryStr.split(' ').slice(0, -1).join(' '))
-    return (oneStepUp != null && oneStepUp.offsetParent != null)
+    if (oneStepUp != null && oneStepUp.offsetParent != null)
+        return oneStepUp
+    return null
 }
 
 function setTooltipsVisibility(hideAll = false){
     var TTs = document.querySelectorAll('div.HelpCallTT');
     TTs.forEach(function(tt){
-        if(!hideAll && visibleDOM(tt.getAttribute('data-querystr'))){
+        if(!hideAll && visibleDOM(tt.getAttribute('data-querystr')) != null){
             // console.log("visible", tt);
             tt.style.display = "inline-block";
         }
@@ -581,7 +597,7 @@ chrome.storage.onChanged.addListener(async function(changes, _) {
         if(newMode != 'sleep')
             addtopbar();
         else
-            removetoolbar();
+            removetopbar();
     }
 
     // handle tooltip deletion
@@ -695,7 +711,7 @@ async function create_tooltip(e) {
  */
 function nodeToCSS(node, cloned=null, absX=0, absY=0){
     var loc = calcTooltipLoc(node, cloned, absX, absY);
-    if(scrollWithWindow(node))
+    if(scrollWithThis(node))
         var css = 'position:absolute; ';
     else
         var css = 'position:fixed; ';
@@ -757,7 +773,7 @@ function calcTooltipLoc( elm, cloned, absX, absY ) {
     var x = Math.max(0, dimensions.left - ttOffsetX + dimensions.width/2 - ttWidth/2);
     var maxX = window.innerWidth;
     var maxY = window.innerHeight;
-    if(scrollWithWindow(elm)){
+    if(scrollWithThis(elm)){
         y += window.scrollY;
         x += window.scrollX;
         maxX = document.documentElement.scrollWidth;
@@ -807,22 +823,55 @@ function overlap(x, y){
     return overlapped
 }
 
+/**
+ * Find the scrollable parent if exists
+ * @param {Node} element 
+ * @param {boolean} includeHidden 
+ * @returns 
+ */
+function getScrollParent(element, includeHidden = false) {
+    if(!element){
+        return null;
+    }
+
+    if (getComputedStyle(element).position === "fixed")
+        return scrollWithThis(element);
+    let scrollParent = null;
+    for(var parent = element.parentElement; !scrollParent; parent = parent.parentElement){
+        if(!parent)
+            return null;
+        scrollParent = scrollWithThis(element, parent);
+    }
+    return scrollParent;
+    /*var style = getComputedStyle(element);
+    var excludeStaticParent = style.position === "absolute";
+    var overflowRegex = includeHidden ? /(auto|scroll|hidden)/ : /(auto|scroll)/;
+
+    
+    for (var parent = element; (parent = parent.parentElement);) {
+        style = getComputedStyle(parent);
+        if (excludeStaticParent && style.position === "static") {
+            continue;
+        }
+        if (overflowRegex.test(style.overflow + style.overflowY + style.overflowX)) return parent;
+    }
+
+    return scrollWithThis(element);*/
+}
+
 /** 
  * Check if a given element scrolls with the window (position fixed or not)
- * TODO only detects scrolls at the window's level (not in navbar, iframe, etc.)
  * @param {Node} elm element to check
  * @return {boolean}
 */
-function scrollWithWindow( elm ) {
+function scrollWithThis ( elm, parent=document.scrollingElement ) {
     before = elm.getBoundingClientRect();
-    window.scrollBy(1,1);
+    parent.scrollBy(1,1);
     after = elm.getBoundingClientRect();
-    window.scrollBy(-1,-1);
+    parent.scrollBy(-1,-1);
     if(before.top != after.top || before.left != after.left)
-        return true;
-    return false;
-
-    // TODO within div scroll isn't supported yet
+        return parent;
+    return null;
 }
 
 /** 

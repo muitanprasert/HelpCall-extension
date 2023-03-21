@@ -1,11 +1,18 @@
 ## 2023-03-21
 [todo] add mutationobserver back to ignore left-clicks that don't cause any mutation?
 
+[issue-3] [note] scroll parent code logic
+1. scrollParent doesn't need to be saved. getScrollParent is (hopefully?) not too expensive and can be called on the target (based on queryStr) at the time of tooltip injection.
+2. add eventListener to the scrollParent if scrollParent != html or body (anything that's already taken care of by fixed vs absolute positioning). this should be able to save some computation time, assuming most objects should scroll with the window.
+[partial] implemented scroll listener. doesn't exactly work with all scrolls (some wheel actions don't trigger scroll event), but seems okay with most.
+
+[todo] [note] edit mode: deletion should be doable from the topbar since sometimes you click a notification or smth that you can't pull back up again and there should be a way to clean those out.
+
 
 ## 2023-03-20
 implemented all of topbar's basic features
 [issue-5] topbar also appears but the layout is off on MDN website
-[issue-5] fixed google image problem by relaxing a condition in hasPositionedParent, needs to be further tested
+[issue-5] [partial] fixed google image problem by relaxing a condition in hasPositionedParent, needs to be further tested
 
 implemented url match relaxation. as a result, now google search (image, all, news, etc.) are all considered the same page, but their DOM structures are very different so the tooltips don't cross-appear anyways.
 
