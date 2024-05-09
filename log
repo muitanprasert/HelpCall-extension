@@ -1,12 +1,96 @@
+# 2023-08-29
+[resolved] [issue-11] scroll to tooltip on click regardless of what the parent is (only the closest parent, cannot scroll several levels of container)
+[done] removed click on gray tooltips to open a new page as it appears to be quite confusing
+
+# 2023-07-25
+[resolved] [issue-4] fixed another deletion bug (related to alldone variable)
+[issue-6] [partial] edge cases for positioning done for 5/6 tasks
+[issue-11] scrollIntoView() works only for window scrolling, not when there is a different scroll parent. small edge case I don't intend to fix for now.
+[done] sort the tooltips in topbar every time it's updated
+
+# 2023-07-04
+[issue-6] [partial] attempted dynamic positioning by adding the recalculation to setTooltipsVisibility (reLoc = true)
+* queryStr is flawed. added "name" to one of the identifiers but will have to see if name/id will get us in trouble in other cases.
+* still needs a lot more testing.
+
+# 2023-06-29
+[done] calculate original position based on scrollParent instead of window
+[issue-6] [todo] the position of the right-oriented tooltips are still sometimes a bit off, covering the button directly. also, for some types of buttons, such as OK/cancel, it's safer to place tooltip below it.
+
+[issue-10] when user clicks then type, it's more natural to have only 1 tooltip that says "click here then type" and 2 tooltips or just one that says "click here"
+
+# 2023-06-28
+[issue-6] [partial] added tooltips placed on the right as the default. 
+
+# 2023-06-07
+[issue-6] (related to tooltip placement) in general still needs to be improved. current plan of action:
+* add an option for tooltips to be placed on the right of the object
+* figure out a heuristic for deciding the orientation. most things tend to be stacked vertically, so it might make sense to make right tooltip the default.
+* once we decide on the task, I can also just add exceptions to manually fix the terrible placements.
+
+# 2023-06-06
+[resolved] [issue-9] right click not recorded, but the option selected within the contextmenu can't be listened from within the page.
+
+[done] text description shouldn't concat text from all children elements. we want the text only from the topmost level that has text, but if there are several children at the topmost level, assume there is no text (e.g., user clicked on a container div).
+
+# 2023-06-02
+[done] improved the queryStr accuracy and added textContent check
+
+[todo] recalculate tooltip position based on the queryStr?
+
+[done] currently I'm calling setTooltipsVisibility for every mutation. check IntersectionObserver to see if I can make the call only if there is visibility change on the target elements. might allow us to be more accurate in checking visibility than simply finding the element as well (e.g., the element may be hidden).
+* too complex to write because after an elements gets removed from the dom structure, the observer won't recognize it even if the exact same code is re-injected.
+* wrote a separate isVisible function to call in setTooltipsVisibility, and modified mutationObserver to call setTooltipsVisibility more often. probably the observer is producing a lot more mutations, it's a bit delayed but is obviously more accurate.
+
+# 2023-06-01
+[done] some element recognition issues with calendar, might've broke some other cases
+
+[done] save changes while reading, edits should be saved the same way newly written guides are saved (overwrite the guide's object in local storage).
+
+[todo] add confirmation button for tooltip & guide deletion
+
+# 2023-04-08
+[resolved] [issue-8] didn't test very thoroughly but looks like it works!!
+
+# 2023-04-24
+[issue-8] some pages reload without triggering page load, so the moved page gets shifted back up
+
+## 2023-04-12
+[resolved] order of topbar tooltips goes wonky when reload a new page in place. speculate to be because the function is called from two places so there is some overwriting going on for some tooltips.
+
+[issue-7] no solution for overflowing when there are a lot of tooltips yet
+
+## 2023-04-11
+[done] add context menu for topbar tooltips
+
+[done] add hyperlink for grayed topbar tooltips
+
+## 2023-04-04
+[resolved] completely modified the editing features to use context menu
+
+[issue-6] (related to tooltip placement) since the text can now be edited, it's possible to take up too many lines and disappear in to the top or the bottom of the page.
+
+## 2023-03-30
+[resolved] [issue-4] tooltip numbers go wonky on vpl after deleting a step in front
+
+## 2023-03-28
+[done]
+* save both types of edits to session storage as soon as they done
+* if writing, edits should be saved to local storage automatically at the end
+
+[issue-4] tooltip 0 appeared again today, but then I did the same sequence but couldn't recreate it...
+
+[resolved] [issue-6] (related to tooltip placement) because the actual position of tooltip is -offsetLeft of closed tooltip, you can drag beside it as well, which sometimes covers the tooltip on its left.
+
+[issue-5] youtube's video previews get messed up by topbar
+
 ## 2023-03-21
 [todo] add mutationobserver back to ignore left-clicks that don't cause any mutation?
 
-[issue-3] [note] scroll parent code logic
+[resolved] [issue-3] [note] scroll parent code logic
 1. scrollParent doesn't need to be saved. getScrollParent is (hopefully?) not too expensive and can be called on the target (based on queryStr) at the time of tooltip injection.
 2. add eventListener to the scrollParent if scrollParent != html or body (anything that's already taken care of by fixed vs absolute positioning). this should be able to save some computation time, assuming most objects should scroll with the window.
 [partial] implemented scroll listener. doesn't exactly work with all scrolls (some wheel actions don't trigger scroll event), but seems okay with most.
-
-[todo] [note] edit mode: deletion should be doable from the topbar since sometimes you click a notification or smth that you can't pull back up again and there should be a way to clean those out.
 
 
 ## 2023-03-20
@@ -40,7 +124,7 @@ partially implemented topbar
 
 ## 2023-02-21
 
-[issue-3] tried to find and save scrollable parent, but ran into a couple of roadblocks
+[resolved] [issue-3] tried to find and save scrollable parent, but ran into a couple of roadblocks
 * attempt saved in script-scrollParent.jss
 * position will have to be recalculated. not sure how yet.
 * some elements have properties that prevent document.getDocumentById from finding it, so tooltips become non-interactive if placed in that kind of parent.
@@ -58,7 +142,7 @@ partially implemented topbar
 
 ## 2023-02-14
 
-[partial] restructured variable scheme for saving event data
+[partial] [issue-2] restructured variable scheme for saving event data
 * added a deep copy of the target element as soon as the event is triggered and keep a deep copy of the bounding rect while also keeping the element itself to trace the dom tree
 * put all details of the event in one object and pass it as function parameters instead of as global variables
 

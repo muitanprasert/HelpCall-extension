@@ -43,6 +43,9 @@ async function saveSteps(){
     delete sessionStorage['mode'];
     temp[guidename] = sessionStorage;
     
+    // write guidename back into session storage too
+    chrome.storage.session.set({_guidename: guidename});
+    
     if("1" in sessionStorage)     // write only if not empty
         chrome.storage.local.set(temp);
 
@@ -51,11 +54,31 @@ async function saveSteps(){
 }
 document.getElementById("save-button").onclick = saveSteps;
 
+async function saveChanges(){
+    let sessionStorage = await chrome.storage.session.get(null);
+    if('_guidename' in sessionStorage){
+        let temp = {};
+        let gname = sessionStorage['_guidename'];
+        delete sessionStorage['mode'];
+        delete sessionStorage['_guidename'];
+        temp[gname] = sessionStorage;
+        
+        chrome.storage.local.set(temp);
+
+        document.getElementById("update-guide").textContent = 'All Changes Saved!';
+        document.getElementById("update-guide").className = "astext";
+        await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+    setToRead();
+}
+document.getElementById("update-guide").onclick = saveChanges;
+
 /**
  * Set the popup's HTML and session storage's variables when changed to sleep mode
  */
 function setToSleep(){
     document.getElementById("delimiter").textContent = "Start recording";
+    document.getElementById("update-guide").classList.add("inactive");
     document.getElementById("guide-name").style.display = "none";
     document.getElementById("after-stop").style.display = "none";
     populateGuideList();
@@ -92,19 +115,28 @@ document.body.onload = setState;
  */
 function setToRead(){
     hideAllDivs();
-    document.getElementById("delimiter").textContent = "Close the guide"
+    document.getElementById("delimiter").textContent = "Close the guide";
     chrome.storage.session.set({"mode":"read"});
 }
 
 /**
  * Set the popup's HTML and session storage's variables when changed to paused mode
  */
-function setToPause(){
+async function setToPause(){
     chrome.storage.session.set({"mode":"write-paused"});
-    document.getElementById("delimiter").textContent = "Resume recording";
     document.getElementById("recorded-div").style.display = "none";
-    document.getElementById("guide-name").style.display = "inline-block";
-    document.getElementById("after-stop").style.display = "inline-block";
+
+    let gname = await readSessionStorage('_guidename');
+    if(gname){
+        document.getElementById("delimiter").textContent = "Close the guide";
+        document.getElementById('update-guide').classList.remove("inactive");
+    }
+    else{
+        document.getElementById("delimiter").textContent = "Resume recording";
+        document.getElementById("update-guide").classList.add("inactive");
+        document.getElementById("guide-name").style.display = "inline-block";
+        document.getElementById("after-stop").style.display = "inline-block";
+    }
 }
 
 /**
@@ -112,7 +144,9 @@ function setToPause(){
  * @param {string} url
  */
 function shortUrl(url){
-    return url.split("?")[0]
+    if(url)
+        return url.split("?")[0].split("/").slice(0,6).join("/").replace(".ca", ".com")
+    return 'URL UNDEFINED'
 }
 
 /**
@@ -131,10 +165,14 @@ async function populateGuideList(){
 
     let foundOne = false;
     let savedGuides = await listSavedGuides();
-    for (const [gname, url] of Object.entries(savedGuides)){
-        if(shortUrl(thisUrl) == shortUrl(url)){
-            addGuideToList(gname);
-            foundOne = true;
+    console.log(savedGuides);
+    for (const [gname, urls] of Object.entries(savedGuides)){
+        for(var i=0; i<urls.length; i++){
+            if(shortUrl(thisUrl) == shortUrl(urls[i])){
+                addGuideToList(gname);
+                foundOne = true;
+                break;
+            }
         }
     }
     if(foundOne)
@@ -167,6 +205,7 @@ function addGuideToList(guideName){
         e.preventDefault();
         let temp = await readLocalStorage(guideName)
         console.log("Retrieved guide", temp);
+        temp['_guidename'] = guideName;
         chrome.storage.session.set(temp);
         setToRead();
     });
@@ -179,7 +218,8 @@ function addGuideToList(guideName){
     deleteButton.addEventListener('mousedown', function(e){
         e.preventDefault();
         chrome.storage.local.remove(guideName);
-        document.getElementById('saved-steps').removeChild(document.getElementById(itemID));
+        populateGuideList();
+        //document.getElementById('saved-steps').removeChild(document.getElementById(itemID));
     });
     div.appendChild(deleteButton);
 
@@ -201,15 +241,21 @@ async function listSavedGuides(){
     let keys = Object.keys(storage);
     let temp = {}
     keys.forEach(function(key){
-        try {
+        Object.keys(storage[key]).forEach(function(stepNum){
+            if(key in temp){
+                temp[key].push(storage[key][stepNum]["url"]);
+            }
+            else
+                temp[key] = [ storage[key][stepNum]["url"] ]
+        });
+        /*try {
             temp[key] = storage[key]["1"]["url"]
         }
         catch(e){
             console.log("WARNING: First step's URL not found")
             temp[key] = ''
-        }
+        }*/
     });
-    console.log(temp);
     return temp;
 }
 
@@ -220,6 +266,7 @@ function hideAllDivs(){
     document.getElementById('recorded-div').style.display = "none";
     document.getElementById("guide-name").style.display = "none";
     document.getElementById("after-stop").style.display = "none";
+    document.getElementById("update-guide").classList.add("inactive");
 }
 
 /** 

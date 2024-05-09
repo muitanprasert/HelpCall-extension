@@ -10,25 +10,28 @@ const interactive_nodes = {
     'img':{ name:'image', attr: 'usemap'},
     'input':{ name:'$[type] field' }, // type != hidden
     'select':{ name: 'drop-down list'},
-    'textarea':{ name: 'textbox'}
+    'textarea':{ name: 'textbox' }
 } 
-const interactive_roles = ['button', 'checkbox', 'link', 'progressbar', 'searchbox', 'scrollbar', 'slider', 'spinbutton', 'switch', 'textbox', 'tooltip','combobox', 'grid', 'listbox', 'menu', 'menubar', 'radiogroup', 'tablist', 'tree', 'treegrid'];
+//const interactive_roles = ['button', 'checkbox', 'link', 'progressbar', 'searchbox', 'scrollbar', 'slider', 'spinbutton', 'switch', 'textbox', 'tooltip','combobox', 'grid', 'listbox', 'menu', 'menuitem', 'menubar', 'radiogroup', 'tablist', 'tree', 'treeitem', 'treegrid'];
+const includedAttr = ['role', 'aria-label', 'name', 'type'] //,'id']
 
 // constants
 const ttHeight = 50;
 const ttWidth = 36;
-const ttOffsetX = 51;
 
 // global variables
 var url = window.location.href;
 var new_event = false;  // kept in case we wanna bring mutation observer back
 var alldone = true;
+var mode = "sleep";
+var hideAll = false;
+var holdingCtrl = false;
 
 // ======= OVERVIEW BAR =======
 // Modified from https://github.com/stefanvd/Browser-Extensions/blob/master/Proper-Menubar/Proper-Menubar-Edge-extension/js/content.js
 var taskchangepositiontop = false;
 
-var skipPositionedChild = function( node, style ) {
+var skipPositionedChild = function( node ) {
     if ( this.offsetParent &&
          this.offsetParent.tagName !== 'BODY') return true;
     if ( hasPositionedParent(node) ) return true;
@@ -40,7 +43,10 @@ var hasPositionedParent = function( node ){
     if ( parent.tagName === 'BODY') return false; // added
     var position = getComputedStyle(parent).position;
     if (position !== 'static') {
-      return true;
+        // make sure parent is shifted too
+        shiftForTopbar(parent);
+
+        return true;
     }
     return hasPositionedParent( parent );
 };
@@ -64,98 +70,43 @@ function createDOMElement(tag, innerText, attrs){
 /**
  * Add topbar and (try to) move every element in the page down regardless of its positioning style.
  */
-let topbarHeight = '45px';
+let topbarHeight = '40px';
 let topbarHeightInt = parseInt(topbarHeight, 10);
 function addtopbar(){
+    // create topbar or update bar if it already exists
     var topbar = document.getElementById('HelpCall-topbar-div');
-    if(topbar){}
+    if(topbar){
+        updateBarTooltips();
+    }
     else{
         var Children = document.body.getElementsByTagName("*");
         for (var i = 0, len = Children.length; i < len; i++) {
-
-            if(Children[i].currentStyle){
-                var x = Children[i].currentStyle["position"];
-                var w = Children[i].currentStyle["margin-top"];
-                var v = Children[i].currentStyle["margin-bottom"];
-                var y = Children[i].currentStyle["top"];
-                var z = Children[i].currentStyle["bottom"];
-                var q = Children[i].currentStyle["height"];
-            }
-            else if(window.getComputedStyle){
-                var st = document.defaultView.getComputedStyle(Children[i], null);
-                var x = st.getPropertyValue("position");
-                var w = st.getPropertyValue("margin-top");
-                var v = st.getPropertyValue("margin-bottom");
-                var y = st.getPropertyValue("top");
-                var z = st.getPropertyValue("bottom");
-                var q = st.getPropertyValue("height");
-            }
-
-            const exemptSites = ["mail.google"];
-            if((x == "absolute" || x == "fixed") && y !== 'auto'){
-                // exempt some sites that we know force-changing position will break
-                let exempt = false;
-                exemptSites.forEach(site => {
-                    if(window.location.href.includes(site))
-                        exempt = true;
-                });
-
-                if(exempt)
-                    taskchangepositiontop = false;
-                else if (x === 'absolute' && skipPositionedChild(Children[i]) ) {
-                    taskchangepositiontop = false;
-                }else{
-                    if(x === 'fixed'){
-                        if(y != topbarHeight){
-                            taskchangepositiontop = true;
-                        }
-                    }else{
-                        taskchangepositiontop = true;   // absolute
-                    }
-                }
-
-                if(taskchangepositiontop == true){
-                    Children[i].setAttribute("data-helpcalltopbar",true);
-                    if(w != ""){
-                        Children[i].setAttribute("data-spmtop",w);
-                        Children[i].style.marginTop = parseInt(w, 10) + topbarHeightInt + "px";
-                    }else if(v != ""){
-                        Children[i].setAttribute("data-spmbottom",w);
-                        Children[i].style.marginBottom = parseInt(w, 10) + topbarHeightInt + "px";
-                    }
-
-                    // if "top" and "bottom" is 0 => then calc height
-                    if((q != "0px") && (y=="0px" && z=="0px")){
-                        Children[i].setAttribute("data-spmheight",q);
-                        Children[i].style.height = "calc( " + q + " - " + topbarHeight + ")";
-                    }
-                }
-            }
-
+            shiftForTopbar(Children[i]);
         }
-        var divblock = createDOMElement("div", "", {"id":"HelpCall-topbar-block"});
-        document.body.prepend(divblock);
+        if(!document.getElementById('HelpCall-topbar-block')){
+            var divblock = createDOMElement("div", "", {"id":"HelpCall-topbar-block"});
+            document.body.prepend(divblock);
+            if(getComputedStyle(document.querySelector('#HelpCall-topbar-block')).height == 0){
+                document.querySelector('#HelpCall-topbar-block').style.paddingTop = topbarHeight;
+            }
+        }
 
         // Add content to the bar
         var frame = createDOMElement("div", "", {'id':"HelpCall-topbar-div"});
-        frame.appendChild(createDOMElement("img", "", {"style":"height:25px; width:25px; padding:0 10px 0 0; float:left;", "src":"https://i.ibb.co/Sdt9nTc/favicon.png"}));
-        frame.appendChild(createDOMElement("span", "Showing guide tooltips: "));
+        frame.appendChild(createDOMElement("img", "", {"style":"height:25px; width:25px; padding:0 5px 0 0; float:left;", "src":"https://i.ibb.co/Sdt9nTc/favicon.png"}));
+        frame.appendChild(createDOMElement("span", "Recording guide tooltips: ", {"id":"HelpCall-topbar-div-guidename"})); // TODO change this text according to the guide name when reading
 
         let div = createDOMElement("div", "", {"id":"HelpCall-listOfTT"});
-        div.style.position = "relative";
         frame.appendChild(div);
 
-        var toggle = createDOMElement("div", "", {"style":"float:right; width:265px; height:100%;"});
+        var toggle = createDOMElement("div", "", {"id":"HelpCall-toggleTT"});
         toggle.appendChild(createDOMElement("span", "Show tooltips on this page"));
         var toggleLabel = createDOMElement("label", "", {"class":"switch"});
         var toggleInput = createDOMElement("input", "", {"type":"checkbox"});
         toggleInput.checked = true;
         toggleInput.addEventListener('change', function() {
-            if (this.checked) {
-                setTooltipsVisibility();
-            } else {
-                setTooltipsVisibility(true); // hide all tooltips
-            }
+            hideAll = !this.checked;
+            setTooltipsVisibility();
           });
         toggleLabel.appendChild(toggleInput);
         toggleLabel.appendChild(createDOMElement("span", "", {"class":"slider"}));
@@ -164,7 +115,90 @@ function addtopbar(){
         frame.appendChild(toggle);
         document.documentElement.appendChild(frame);
 
-        updateBarTooltips();
+        window.setTimeout(function(){
+            updateBarTooltips();
+        }, 500);
+    }
+}
+
+function shiftForTopbar(elm){
+    if(elm.getAttribute("data-helpcalltopbar")) { return; }
+    if(elm.currentStyle){
+        var x = elm.currentStyle["position"];
+        var w = elm.currentStyle["margin-top"];
+        var v = elm.currentStyle["margin-bottom"];
+        var y = elm.currentStyle["top"];
+        var z = elm.currentStyle["bottom"];
+        var q = elm.currentStyle["height"];
+    }
+    else if(window.getComputedStyle){
+        var st = document.defaultView.getComputedStyle(elm, null);
+        var x = st.getPropertyValue("position");
+        var w = st.getPropertyValue("margin-top");
+        var v = st.getPropertyValue("margin-bottom");
+        var y = st.getPropertyValue("top");
+        var z = st.getPropertyValue("bottom");
+        var q = st.getPropertyValue("height");
+    }
+    
+    const exemptSites = ["mail.google"];
+
+    // TOFIX: not sure why VPL stopped working, temporary solution
+    if(elm.className == "dialog-off-canvas-main-canvas"){
+        elm.setAttribute("data-helpcalltopbar",true);
+        elm.setAttribute("data-spmtop",0);
+        elm.style.marginTop = topbarHeightInt + "px";
+    }
+
+    else if((x == "absolute" || x == "fixed") && y !== 'auto'){
+        // exempt some sites that we know force-changing position will break
+        let exempt = false;
+        exemptSites.forEach(site => {
+            if(window.location.href.includes(site))
+                exempt = true;
+        });
+
+        if(exempt || inTooltip(elm))
+            taskchangepositiontop = false;
+        else if (x === 'absolute' && skipPositionedChild(elm) ) {
+            taskchangepositiontop = false;
+        }else{
+            if(x === 'fixed'){
+                if(y != topbarHeight){
+                    taskchangepositiontop = true;
+                }
+            }else{
+                taskchangepositiontop = true;   // absolute
+            }
+        }
+
+        if(taskchangepositiontop == true){
+            elm.setAttribute("data-helpcalltopbar",true);
+            if(w != ""){
+                elm.setAttribute("data-spmtop",w);
+                elm.style.marginTop = parseInt(w, 10) + topbarHeightInt + "px";
+            }else if(v != ""){
+                elm.setAttribute("data-spmbottom",w);
+                elm.style.marginBottom = parseInt(w, 10) + topbarHeightInt + "px";
+            }
+
+            // if "top" and "bottom" is 0 => then calc height
+            if((q != "0px") && (y=="0px" && z=="0px")){
+                elm.setAttribute("data-spmheight",q);
+                elm.style.height = "calc( " + q + " - " + topbarHeight + ")";
+            }
+        }
+    }
+
+    // other exceptions: don't forget to revert in removetopbar too
+    if(elm.tagName == 'YTD-VIDEO-PREVIEW'){
+        elm.style.marginTop = "-"+topbarHeight;
+    }
+    else if(elm.tagName == 'YTD-PLAYLIST-HEADER-RENDERER')
+        elm.style.marginTop = "0";
+    else if(elm.id == 'header' && elm.className == "style-scope ytd-rich-grid-renderer"){
+        elm.style.marginTop = "-"+topbarHeight;
+        elm.style.marginBottom = topbarHeight;
     }
 }
 
@@ -175,10 +209,8 @@ function removetopbar(){
 	var checkb = document.getElementById('HelpCall-topbar-div');
 	if(checkb){
 		document.documentElement.removeChild(checkb);
-
 			var a = document.querySelectorAll('[data-helpcalltopbar]');
-
-			var a = document.body.getElementsByTagName("*");
+			//var a = document.body.getElementsByTagName("*");
 			for (var i = 0, len = a.length; i < len; i++) {
 					if(a[i].hasAttribute("data-spmtop")){
 						a[i].style.marginTop = a[i].getAttribute("data-spmtop");
@@ -189,50 +221,77 @@ function removetopbar(){
 					if(a[i].hasAttribute("data-spmheight")){
 						a[i].style.height = a[i].getAttribute("data-spmheight");
 					}
-					a[i].setAttribute("data-helpcalltopbar",false);
+					a[i].removeAttribute("data-helpcalltopbar");
 			}
 
 	}
 
-	var checkc = document.getElementById('HelpCall-topbar-block');
+    var checkc = document.getElementById('HelpCall-topbar-block');
 	if(checkc){
+        console.log("removing topbar");
 		document.body.removeChild(checkc);
 	}
+
+    // exceptions
+    if(window.location.href.includes("youtube")){
+        try{
+            document.querySelector('ytd-video-preview').style.marginTop = 0;
+            document.querySelector('div#header.ytd-rich-grid-renderer').style.marginTop = 0;
+            document.querySelector('div#header.ytd-rich-grid-renderer').style.marginBottom = 0;
+        }
+        catch(e){ /* Do nothing */ }
+    }
 }
 
 /**
  * Populate the HelpCall-listOfTT div, assuming it has been created
  * Pretty expensive, should be used only for creation and tooltip deletion
  */
+var updatingBarTooltips = false;
 async function updateBarTooltips(){
+    if(updatingBarTooltips){ return; }
+    updatingBarTooltips = true;
+    updateTopbarGuidename();
+
     let div = document.getElementById("HelpCall-listOfTT");
+    if(!div) return null;
     div.replaceChildren();
     let nextNum = Number(await readSessionStorage('num'));
+    console.log("# tooltips when updating bar ", nextNum-1);
     for(let i=1; i<nextNum; i++){
         await addBarTooltip(i);
     }
+
+    // sort by id
+    if(div){
+        [].map.call( div.children, Object ).sort( function ( a, b ) {
+            return +a.id.match( /\d+/ ) - +b.id.match( /\d+/ );
+        }).forEach( function ( elem ) {
+            div.appendChild( elem );
+        });
+    }
+
+    updatingBarTooltips = false;
     return div;
 }
 
 const grayedColor = "#99929B";
 const defaultColor = "#61187c";
-async function addBarTooltip(i){
+
+async function addBarTooltip(i, stepUrl = ""){
     let div = document.getElementById("HelpCall-listOfTT");
-    if(div == null || document.getElementById('HelpCall-bar_'+i) != null){
-        // failsafe: if it gets called when the bar list isn't there yet or that tooltip is already there, just abort.
-        return;
-    }
-    let obj = await readSessionStorage(i.toString());
-    var divClosed = document.createElement('div')
-    divClosed.className = "HelpCall HelpCall-barTT aboveTT";
-    divClosed.id = 'HelpCall-bar_'+i;
+    if(div == null) return;
+
+    var divBar = document.createElement('div')
+    divBar.className = "HelpCall HelpCall-barTT aboveTT";
+    divBar.id = 'HelpCall-bar_'+i;
     let color = "#61187c";
-    console.log('Creating bar tooltip HelpCall_'+i, document.getElementById('HelpCall_'+i));
     if(document.getElementById('HelpCall_'+i) == null || document.getElementById('HelpCall_'+i).style.display == "none"){
         color = grayedColor;
-        divClosed.style.cursor = "default";
+        //divBar.style.cursor = "default";
     }
-    divClosed.innerHTML = '<svg class="closedTT-shape" width="25px" \
+    divBar.style.cursor = "pointer";    // always grabbable for deletion
+    divBar.innerHTML = '<svg class="closedTT-shape" width="25px" \
         viewbox="0 0 30 42"> \
         <path stroke="#fffae7" fill="'+color+'" stroke-width="2" \
         d="M15 3 \
@@ -241,24 +300,83 @@ async function addBarTooltip(i){
             Q13.5 6.8 15 3z" /> \
     </svg> \
     <p class="closedTT-text">'+i+'</p>';
-    divClosed.addEventListener("mousedown", () => {
-        if(document.querySelector('#HelpCall-bar_1 path').getAttribute('fill') == defaultColor) // for some technical reason, "this" is undefined here
-            document.getElementById('HelpCall_'+i).scrollIntoView({ behavior: "smooth", block: "center" });
+
+    if(stepUrl == ""){
+        let obj = await readSessionStorage(i.toString());
+        if(!obj)
+            console.log("WARNING: failed to read tooltip", i);
+        else
+            stepUrl = obj['url'];
+    }
+
+    createContextMenu(divBar, false);
+    divBar.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if(e.button == 0 && !contextMenuOn){
+            if(document.querySelector('#HelpCall-bar_'+i+' path').getAttribute('fill') == defaultColor){ // scroll when purple
+                let TT = document.getElementById('HelpCall_'+i);
+                let elm = queryStrToDOM(TT.getAttribute("data-querystr"));
+                let ttPos = TT.getBoundingClientRect().top;
+                let parent = getScrollParent(elm);
+                let parentPos = parent.getBoundingClientRect().top;
+                parent.scrollTo({'top': ttPos - parentPos - 150, 'behavior': 'smooth'});
+            
+                //document.getElementById('HelpCall_'+i).scrollIntoView({ behavior: "smooth", block: "center" });*/
+            }
+            /*else {
+                chrome.runtime.sendMessage(message={ url : stepUrl }, function(response){   // open new page
+                    console.log(response);
+                });
+            }*/
+        }
+        else if(e.button == 2){ //} && mode.startsWith('write')){ // uncomment to edit only in write mode
+            // if another context menu is on, hide it first
+            if(contextMenuOn){
+                contextMenuOn.style.display = "none";
+            }
+
+            // display this context menu
+            let contextmenu = e.target.closest('.HelpCall-barTT').querySelector('.HelpCall-context-menu');
+            contextmenu.style.display = "block";
+            contextMenuOn = contextmenu;
+        }
     });
 
-    div.appendChild(divClosed);
+    if(document.getElementById('HelpCall-bar_'+i) == null){
+        // failsafe: if it gets called when that tooltip is already there, just don't add it.
+        div.appendChild(divBar);
+    }
 }
 async function updateColorBarTooltips(){
     let nextNum = Number(await readSessionStorage('num'));
     for(let i=1; i<nextNum; i++){
         let thisTT = document.getElementById('HelpCall-bar_'+i);
-        if(document.getElementById('HelpCall_'+i) == null || document.getElementById('HelpCall_'+i).style.display == "none"){
-            thisTT.querySelector('path').fill = grayedColor;
-            thisTT.style.cursor = "default";
+            if(thisTT){
+            if(document.getElementById('HelpCall_'+i) == null || document.getElementById('HelpCall_'+i).style.display == "none"){
+                thisTT.querySelector('path').setAttribute('fill', grayedColor);
+                thisTT.style.cursor = "default";
+            }
+            else{
+                thisTT.querySelector('path').setAttribute('fill', defaultColor);
+                thisTT.style.cursor = "pointer";
+            }
+        }
+    }
+}
+/**
+ * Update guidename in the topbar when reading
+ */
+async function updateTopbarGuidename(){
+    var span = document.getElementById('HelpCall-topbar-div-guidename')
+    if(span){
+        let gname = await readSessionStorage('_guidename')
+        console.log("guidename:", gname);
+        if(gname){
+            span.textContent = 'Showing "' + gname + '":'
         }
         else{
-            thisTT.querySelector('path').fill = defaultColor;
-            thisTT.style.cursor = "pointer";
+            span.textContent = 'Recording guide tooltips: '
         }
     }
 }
@@ -270,34 +388,87 @@ let timer = null;
 document.addEventListener('click', function(e) {
     alldone = false;
     var thisEvent = recordEvent(e);
+    let focus = thisEvent.target;
 
-    // ignore if click in tooltip
-    if((document.getElementById('HelpCall-topbar-div') && e.clientY < topbarHeightInt)
-            || inTooltip(e.target) != null){
+    // exception: forced modal to stay on in gmail
+    let gmail_modal = document.querySelectorAll('div.ZF-Av');
+    if(window.location.href.includes("mail.google") && gmail_modal.length > 0){
+        if((thisEvent.absY > 460 || thisEvent.absX < 250) && focus.innerText != "Create filter"){
+            gmail_modal.forEach(modal => modal.remove());
+        }
+        else if(focus.innerText != "Search" && focus.innerText != "Create filter"){
+            gmail_modal[gmail_modal.length-1].style.visibility = "visible";
+            gmail_modal[gmail_modal.length-1].style.display = "initial";
+            console.log("forced modal to stay on");
+        }
+    }
+
+    if(contextMenuOn){              // hide context menu if click outside & don't record it
+        if(!e.target.className.includes("HelpCall-context")){
+            e.stopPropagation();
+            contextMenuOn.style.display = "none";
+            contextMenuOn = null;
+        }
+        alldone = true;
+    }
+    else if((document.getElementById('HelpCall-topbar-div') && e.clientY < topbarHeightInt)     // ignore if click in tooltip
+            || inTooltip(focus) != null || focus.tagName == "BODY"
+            || editingTextDesc){
         e.stopPropagation();
         alldone = true;
     }
-    else if (timer) {
-        clearTimeout(timer);
-        timer = null;
-        // Handle double click event
-        thisEvent.eventType = 'd';
-        new_event = true;
-        create_tooltip(thisEvent);
-    } else {
-        timer = setTimeout(function() {
+    else if(!ignoreMove(tempFocus, focus)){    // ignore if it's on the same target as last event
+        if (timer) {
+            clearTimeout(timer);
             timer = null;
-            // Handle single click event
-            thisEvent.eventType = 'c';
+            // Handle double click event
+            thisEvent.eventType = 'd';
             new_event = true;
             create_tooltip(thisEvent);
-        }, 250);
+        } else {
+            timer = setTimeout(function() {
+                timer = null;
+                // Handle single click event
+                thisEvent.eventType = 'c';
+                new_event = true;
+                create_tooltip(thisEvent);
+            }, 300);
+        }
+        tempFocus = focus;
+    }
+    else{
+        alldone = true;
+    }
+    // wait until nothing is getting written, then update location
+    if(document.getElementById('HelpCall-topbar-div')){
+        window.setTimeout(function(){
+            console.log("relocing...");
+            setTooltipsVisibility(reLoc = true);
+        }, 500);
     }
 }, true);
+
+function ignoreMove(prevFocus, focus){
+    if(prevFocus == focus)
+        return true;
+    if(window.location.href.includes("twitter") && focus && prevFocus && ((focus.contains(prevFocus) || prevFocus.contains(focus)
+        || (prevFocus.className == focus.className && prevFocus.name == focus.name && prevFocus.getAttribute("data-testid") == focus.getAttribute("data-testid")))
+    ))
+        return true;
+    if(window.location.href.includes("expedia") && prevFocus
+        && ( prevFocus.getAttribute("aria-label") == "Going to"
+        || prevFocus.getAttribute("aria-label") == "Leaving from")){
+            tempFocus = focus;
+            return true;
+    }
+    return false;
+}
+
 document.addEventListener('contextmenu', function(e) {
     alldone = false;
     var thisEvent = recordEvent(e);
     if(inTooltip(e.target) == null){
+        new_event = true;
         thisEvent.eventType = 'r'; // right-click
         create_tooltip(thisEvent);
     }
@@ -310,21 +481,37 @@ document.addEventListener('contextmenu', function(e) {
 
 // helper function for any MOUSE event
 function recordEvent(e){
-    let queryStr = generateQueryStr(e.target);
+    let targetElm = e.target;
+
+    // exception: checkbox days in whenisgood
+    if(window.location.href.includes("whenisgood") && targetElm && targetElm.type == "checkbox" && targetElm.name.includes('showDay')){
+        targetElm = targetElm.parentElement.parentElement;
+        console.log("bumping up to", targetElm);
+    }
+
+    // if checkbox, try to replace with its label (since checkboxes are hard to distinguish)
+    if(targetElm.type == "checkbox"){
+        let itsLabel = targetElm.parentElement.querySelector("label");
+        if(itsLabel)
+            targetElm = itsLabel;
+    }
+
+    let queryStr = generateQueryStr(targetElm);
     //console.log(queryStr);
     //console.log(document.querySelector(queryStr));
 
-    let clone = e.target.cloneNode(true);
-    clone.setAttribute('bounds', JSON.stringify(e.target.getBoundingClientRect()));
+    let clone = targetElm.cloneNode(true);
+    clone.setAttribute('bounds', JSON.stringify(targetElm.getBoundingClientRect()));
     e = e || window.event;
     let thisEvent = {
-        target: e.target,
+        target: targetElm,
         cloned: clone,
         absX: e.pageX,
         absY: e.pageY,
         eventType: 'c',    // default to c = click
         code: null,
-        queryStr: queryStr
+        queryStr: queryStr,
+        url: window.location.href
     }
     return thisEvent;
 }
@@ -336,26 +523,57 @@ function recordEvent(e){
  */
 function generateQueryStr(node){
     let parent = findInteractiveRole(node).elm;
-    if(parent !== null && node.innerText == undefined)
+    if(parent && parent.tagName != "BODY")
         node = parent;
-    let queryStr = '';
+    let queryStr = " || ";
+    let attrs = includedAttr;
+
+    // start with textContent if the node has it
+    if(node.textContent != '' && node.textContent.length < 50){
+        queryStr = " || " + node.textContent;
+    }
+
+    // exception cases
+    else if(window.location.href.includes("whenisgood") && node.tagName=='IMG' && node.hasAttribute('onclick')){
+        if(node.getAttribute("onclick").includes("startDate"))
+            queryStr = " || " + "$DATE:startDate";
+        else if(node.getAttribute("onclick").includes("endDate"))
+            queryStr = " || " + "$DATE:endDate";
+    }
+    else if(window.location.href.includes("mail.google"))
+
+    if(window.location.href.includes("expedia")){
+        attrs.pop("aria-label");
+        attrs.push("data-stid");
+    }
+    else if(window.location.href.includes("whenisgood")){
+        attrs.push("class");
+    }
+
+    // append the selector
     while(node.parentElement != null){
         let tempStr = node.nodeName.toLowerCase();
-        if(node.hasAttribute('id'))
-            tempStr += '[id="'+node['id']+'"]';
-        if(node.hasAttribute('role') && typeof node.role =="string")
-            tempStr += '[role="'+node.role+'"]';
-        /*if(node.hasAttribute('class') && typeof node.className=="string" && !node.className.includes(' ')) // class changes too often
-            tempStr += '[class="'+node.className+'"]';*/
+        attrs.forEach(attr =>{
+            if(node.hasAttribute(attr) && typeof node.getAttribute(attr) == "string")
+                tempStr += '['+attr+'="'+node.getAttribute(attr)+'"]';
+        });
+        
         queryStr = tempStr + ' ' + queryStr;
         node = node.parentElement;
     }
+    //console.log(queryStr);
     return queryStr;
 }
 
 // listen for key presses
 var tempFocus = null;
 document.addEventListener('keyup', function(e){
+    if(editingTextDesc) { return; }
+    if(e.key == "Control"){
+        holdingCtrl = false;
+        return;     // don't record empty ctrl (without another key press)
+    }
+
     alldone = false;
     let focus = document.activeElement;
     let clone = focus.cloneNode(true);
@@ -368,7 +586,8 @@ document.addEventListener('keyup', function(e){
         absY: 0,
         eventType: 's',
         code: null,
-        queryStr: queryStr
+        queryStr: queryStr,
+        url: window.location.href
     }
     new_event = true;
 
@@ -380,27 +599,37 @@ document.addEventListener('keyup', function(e){
         if(e.altKey) keys += 'Alt+'
         keys += e.key;
         thisEvent['code'] = keys
+        thisEvent['absX'] = 1;    // place in the center, bottom of page
+        thisEvent['absY'] = window.innerHeight - 100;
         create_tooltip(thisEvent);
         return;
     }
     // for normal key presses, create only 1 tt until keypress at another focus
-    else if(tempFocus != focus){
+    else if(!ignoreMove(tempFocus, focus)){
         thisEvent.eventType = 'k';
         create_tooltip(thisEvent);
         tempFocus = focus;
     }
 });
+document.addEventListener('keydown', function(e){
+    if(e.ctrlKey) holdingCtrl = true;
+});
 
-window.addEventListener('beforeunload', async (event) => {
-    //const mode = await readSessionStorage('mode');
-    //if (mode == 'write' && !alldone) {
-        for(var i = 0; i < 2000; i++){
+window.addEventListener('beforeunload', function(e){
+    if(mode && mode != "sleep" && !alldone){
+        let delay = 2000;
+        var start = Date.now();
+        while (Date.now() - start < delay) {
+            if(alldone)
+                break;
+        }
+        /*for(var i = 0; i < 2000; i++){
             if(alldone){
                 break;
             }
             console.log(i);     // a hack to delay it bc Promise, setTimeout don't work in beforeunload
-        }
-    //}
+        }*/
+    }
 });
 
 // ========== MANAGING TOOLTIPS =========
@@ -424,6 +653,61 @@ function writeSessionTooltip(num, css, desc, queryStr){
     setVariable(obj);
 }
 
+/**
+ * Add context menu (hidden by default) to tt
+ * @param {*} tt 
+ */
+function createContextMenu(tt, mainTT = true){
+    var div = createDOMElement("div", "", {"class":"HelpCall HelpCall-context-menu"});
+    var div1 = createDOMElement("div", "Delete this tooltip", {"class":"HelpCall-context-item"});
+    div1.addEventListener("click", (e) => {
+        let num = e.target.parentElement.parentElement.id.split("_")[1];
+        
+        /*// delete bar tooltip
+        let barTT = document.getElementById("HelpCall-bar_"+num);
+        barTT.parentElement.removeChild(barTT);
+
+        // delete main tooltip*/
+        alldone = false;
+        if(document.getElementById("HelpCall_"+num))
+            document.body.removeChild(document.getElementById("HelpCall_"+num));
+        chrome.storage.session.remove(num);
+        contextMenuOn.style.display = "none";
+        contextMenuOn = null;
+    })
+    div.appendChild(div1);
+    if(mainTT){
+        var div2 = createDOMElement("div", "Edit this tooltip's text", {"class":"HelpCall-context-item"});
+        div2.addEventListener("click", (e) => {
+            let num = e.target.parentElement.parentElement.id.split("_")[1];
+            let textDesc = document.querySelector('#HelpCall-ttB_'+num+' span');
+            textDesc.contentEditable = true;
+            textDesc.focus();
+            editingTextDesc = true;
+
+            // open tooltip
+            openTooltipTxt(num);
+
+            // hide context menu
+            contextMenuOn.style.display = "none";
+            contextMenuOn = null;
+        })
+        div.appendChild(div2);
+    }
+    tt.appendChild(div);
+}
+
+/**
+ * Open tooltip by number and close the rest
+ */
+function openTooltipTxt(num){
+    document.getElementById('HelpCall_'+num).style.zIndex = "1000000";
+    document.querySelectorAll('div.HelpCall.openTT').forEach(txt => txt.style.display = "none"); // close all
+    document.getElementById('HelpCall-ttB_'+num).style.display = 'block';   // open one
+}
+
+var editingTextDesc = false;
+var contextMenuOn = null;
 /** 
  * Inject HTML code of a tooltip (new or saved) into the page
  * 
@@ -436,18 +720,15 @@ function writeSessionTooltip(num, css, desc, queryStr){
 function injectTooltipHTML(num, style, desc, stepUrl, queryStr){
     let divID = 'HelpCall_'+num;
     var div = document.createElement('div');
-    div.style.cssText = style[0];
     div.id = divID;
     div.className = "HelpCallTT";
-    if(style[1] == 0){
-        div.classList.add('aboveTT')
-    } else {
-        div.classList.add('belowTT')
-    }
+    setStyle(div, style);
+    console.log(num, desc, stepUrl, queryStr);
     div.setAttribute('data-querystr', queryStr);
 
     // add inner elements & event listener
     var divClosed = document.createElement('div')
+    divClosed.id = 'HelpCall-ttA_'+num
     divClosed.className = "closedTT";
     divClosed.innerHTML = '<svg class="HelpCall closedTT-shape" width="'+ttWidth+'px" \
         viewbox="0 0 30 42"> \
@@ -458,64 +739,140 @@ function injectTooltipHTML(num, style, desc, stepUrl, queryStr){
              Q13.5 6.8 15 3z" /> \
     </svg> \
     <p class="HelpCall closedTT-text">'+num+'</p>'
-    divClosed.addEventListener('mousedown', function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        let n = this.innerText;
-        if(e.button == 0)
-            document.getElementById('HelpCall-ttB_'+n).style.display = 'block';
-    });
     divClosed.addEventListener('mouseup', function(e){
         e.preventDefault();
         e.stopPropagation();
         let n = this.innerText;
-        if(e.button == 2){
-            chrome.storage.session.remove(n);
-            window.setTimeout(function(){
-                document.body.removeChild(document.getElementById("HelpCall_"+n));
-            }, 100);
+        if(e.button == 0){  // open text, copied to createContextMenu
+            openTooltipTxt(n);
         }
-    })
+    });
     div.appendChild(divClosed);
     
     var divOpen = document.createElement('div')
     divOpen.className = 'HelpCall openTT'
     divOpen.id = 'HelpCall-ttB_'+num
-    divOpen.innerHTML = desc;
-    divOpen.addEventListener('mousedown', function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        if(e.button == 0)
-            this.style.display = 'none';
-    });
+    let textDesc = document.createElement("span")
+    textDesc.innerHTML = desc;
+    divOpen.appendChild(textDesc);
     divOpen.addEventListener('mouseup', function(e){
         e.preventDefault();
         e.stopPropagation();
         let n = this.id.split("_")[1];
-        if(e.button == 2){
-            chrome.storage.session.remove(n);
-            window.setTimeout(function(){
-                document.body.removeChild(document.getElementById("HelpCall_"+n));
-            }, 100);
+        let textDesc = document.querySelector('#HelpCall-ttB_'+n+' span');
+        if(!textDesc.isContentEditable && e.button == 0){
+            if(holdingCtrl && mode.startsWith('write')){    // ctrl + click to enter edit mode (click again to edit)
+                textDesc.contentEditable = true;
+                editingTextDesc = true;
+            }
+            else{                                           // normal click to close the description
+                document.getElementById('HelpCall_'+n).style.zIndex = "999999";
+                this.style.display = 'none';
+            }
+            
         }
-    })
+    });
+
+    // update in session storage
+    const updateText = async (num, text) => {
+        let storedStep = await readSessionStorage(num);
+        if(storedStep != undefined){
+            storedStep["desc"] = text
+            let temp = {}
+            temp[num] = storedStep
+            console.log("updating tooltip", temp);
+            setVariable(temp);
+        }
+        window.setTimeout(function(){
+            editingTextDesc = false;
+        }, 500);
+    }
+    // exit edit mode when lost focus
+    textDesc.addEventListener('blur', function(){
+        let target = this;
+        window.setTimeout(async function(){
+            target.contentEditable = false;
+            updateText(target.parentElement.id.split("_")[1], target.innerHTML);
+        }, 200);
+    });
+    textDesc.addEventListener('keydown', function(e){
+        e.stopPropagation();
+        if (e.key === "Enter" && e.shiftKey === false){
+            this.contentEditable = false;
+            updateText(this.parentElement.id.split("_")[1], this.innerHTML);
+        }
+    });
+
+    // event listener for contextmenu
+    createContextMenu(div);
+    div.addEventListener('mousedown', function(e){
+        if(e.button == 2 && mode.startsWith('write')){
+
+            // if another context menu is on, hide it first
+            if(contextMenuOn){
+                contextMenuOn.style.display = "none";
+            }
+
+            // display this context menu
+            let contextmenu = this.querySelector('.HelpCall-context-menu')
+            contextmenu.style.display = "block";
+            contextMenuOn = contextmenu;
+        }
+    });
     div.appendChild(divOpen);
 
+    // set visibility
+    if(hideAll){
+        div.style.display = "none";
+    }
+
     // check right before actually injecting if it should still be injected
-    // if(stepUrl == window.location.href && document.getElementById(divID) == null) // url-based
-    document.body.appendChild(div);
+    if(equivalentUrl(stepUrl, window.location.href) && document.getElementById(divID) == null)
+        document.body.appendChild(div);
 
     // add scroller
-    let target = visibleDOM(queryStr);
+    addScroller(div);
+}
+
+/**
+ * Find parent scroller element of a tooltip and add scroll event handler to it
+ * @param {} div 
+ */
+function addScroller(div){
+    if(div.getAttribute("data-hasScroller") == 'true')  return;
+
+    let target = queryStrToDOM(div.getAttribute("data-querystr"));
     let scroller = getScrollParent(target);
-    if(scroller){
-        console.log(scroller);
+    try{
         scroller.addEventListener("scroll", (e) => {
-            console.log("scrolled", e);
-            let tt = document.getElementById(divID);
-            tt.style.marginLeft = (-1)*e.target.scrollLeft + 'px';
-            tt.style.marginTop = (-1)*e.target.scrollTop + 'px';
+            let tt = document.getElementById(div.id);
+            if(tt){
+                tt.style.marginLeft = (-1)*e.target.scrollLeft + 'px';
+                tt.style.marginTop = (-1)*e.target.scrollTop + 'px';
+            }
         });
+        div.setAttribute("data-hasScroller", 'true');
+        console.log("added scroller to", div.id, scroller);
+    }
+    catch(e){
+        div.setAttribute("data-hasScroller", 'false');
+    }
+}
+
+/**
+ * Set css and tooltip orientation to the given div
+ */
+function setStyle(div, style){
+    div.style.cssText = style[0];
+    div.classList.remove('aboveTT')
+    div.classList.remove('belowTT')
+    div.classList.remove('rightTT')
+    if(style[1] == 0){
+        div.classList.add('aboveTT')
+    } else if(style[1] == 1){
+        div.classList.add('belowTT')
+    } else{
+        div.classList.add('rightTT')
     }
 }
 
@@ -523,28 +880,174 @@ function injectTooltipHTML(num, style, desc, stepUrl, queryStr){
  * Find a visible DOM from the given queryStr
  * @param {string} queryStr 
  */
-function visibleDOM(queryStr){
-    let targetElm = document.querySelector(queryStr);
-    if (targetElm != null && targetElm.offsetParent != null)
+function queryStrToDOM(queryStr){
+    let queryResults = queryStr.split(" || ");
+    queryResults[0] = queryResults[0].trim();
+    let targetElm = document.querySelector(queryResults[0]);    // default to the first one it can find
+    if(queryResults.length > 1){                                // just to prevent error
+        queryResults[1] = queryResults[1].trim();
+
+        // exception: textContent of option (gmail)
+        if(window.location.href.includes("mail.google") && queryResults[1].includes("... ")){
+            try{
+                queryResults[1] = queryResults[1].split(": ")[1].split("... ")[0]+"...";
+            }
+            catch(e){
+                queryResults[1] = queryResults[1].split("... ")[0]+"..."
+            }
+        }
+
+        let selectAll = document.querySelectorAll(queryResults[0]);
+        if(selectAll.length > 0){                               // try to match with post-|| text only if there are more than 0 options
+            // exception case: whenisgood calendar
+            if(queryResults[1].startsWith("$DATE:")){
+                let inclTerm = queryResults[1].split(":")[1];
+                selectAll.forEach(elm => {
+                    if(elm.getAttribute("onclick").includes(inclTerm)){
+                        targetElm = elm;
+                    }
+                });
+            }
+            // exception case: twitter's 2nd tweet
+            else if(window.location.href.includes("twitter.com/compose/tweet") && queryStr.includes("Tweet text") && selectAll.length == 2){
+                targetElm = selectAll[1];
+            }
+            // normal case: match with text
+            else{
+                let filterRes = Array.from(selectAll).filter(el => el.textContent.trim() === queryResults[1])
+                if(filterRes.length > 0)
+                    targetElm = filterRes[0];
+                else if(window.location.href.includes("mail.google"))
+                    targetElm = null;
+            }
+        }
+
+        // exception case
+        if(window.location.href.includes("expedia") 
+            && selectAll.length == 0
+            && queryResults[1].length > 3){   // relax to include 4+letter text & remove aria-label if cannot find
+                selectAll = document.querySelectorAll(queryResults[0].replace(/aria-label="[^=]*"/g, "").replace("[]",""));
+                filterRes = Array.from(selectAll).filter(el => el.textContent.includes(queryResults[1]));
+                if(filterRes.length == 1)
+                    targetElm = filterRes[0];
+        }
+        if(window.location.href.includes("whenisgood") && targetElm && Number(queryResults[1])){
+            targetElm = targetElm.parentElement.parentElement;
+        }
+    }
+    const noOffsetParent = ["svg", "g", "path", "BODY"];
+    if (targetElm && (targetElm.offsetParent || noOffsetParent.includes(targetElm.tagName)))
         return targetElm
-    let oneStepUp = document.querySelector(queryStr.split(' ').slice(0, -1).join(' '))
-    if (oneStepUp != null && oneStepUp.offsetParent != null)
-        return oneStepUp
-    return null
+    
+    /*let oneStepUp = queryResults[0].split(' ').slice(0, -1).join(' '))
+    if (oneStepUp.length == 1 && oneStepUp[0] != null && oneStepUp[0].offsetParent != null)
+        return oneStepUp[0]*/
+    return null;
 }
 
-function setTooltipsVisibility(hideAll = false){
+function setTooltipsVisibility(reLoc = false){
+    if(editingTextDesc)
+        return;
+    //console.log("refreshing visibility");
     var TTs = document.querySelectorAll('div.HelpCallTT');
     TTs.forEach(function(tt){
-        if(!hideAll && visibleDOM(tt.getAttribute('data-querystr')) != null){
-            // console.log("visible", tt);
+        let elm = queryStrToDOM(tt.getAttribute('data-querystr'));
+        if(!hideAll && elm && isVisible(elm)){
+            // calculate dynamic location
+            if(reLoc && relocable(elm) && alldone){      
+                elm.setAttribute('bounds', JSON.stringify(elm.getBoundingClientRect()));
+                let calcStyle = nodeToCSS(elm, elm, null, null, tt.id);
+                console.log("reLoc", tt.id) //, "from", tt.style.left, tt.style.top, "to", calcStyle);
+                if(calcStyle){
+                    setStyle(tt, calcStyle);
+                }
+            }
+            // if it's about to turn purple, attempt to add scroller
+            if(tt.style.display == "none")
+                addScroller(tt);
+
+            // set visible
             tt.style.display = "inline-block";
         }
         else{
             tt.style.display = "none";
         }
     });
-    //updateColorBarTooltips();
+    updateColorBarTooltips();
+
+    if(reLoc && window.location.href.includes("Flights-Search")){
+        let sidePanel = document.querySelector('.uitk-side-sheet.uitk-side-sheet-position-trailing.uitk-sheet')
+        if(sidePanel)
+            sidePanel.style.paddingTop = topbarHeight;
+    }
+}
+
+/**
+ * Check whether this tooltip is relocable (against exception cases)
+ * @param {} elm 
+ */
+function relocable(elm){
+    if(window.location.href.includes("calendar.google.com/calendar/u/0/r/settings/createcalendar")
+        && elm.tagName != "LI") //&& elm.innerText != 'Add people and groups' && elm.innerText != 'Create new calendar' )
+        return false;
+    if(window.location.href.includes("calendar.google") && elm.innerText == "Share with specific people or groups")
+        return false;
+    if(window.location.href.includes("youtube") && elm.innerText == "Library")
+        return false;
+    if(window.location.href.includes("mail.google") && elm.tagName == "INPUT")
+        return false;
+    return true;
+}
+
+/**
+ * Check whether an element is visible (up to 4 levels of parent).
+ * @param {*} element 
+ * @returns 
+ */
+function isVisible(element) {
+    // special cases
+    if(window.location.href.includes("/u/0/r/settings/calendar/") 
+        && element.textContent == "Add people and groups" 
+        && document.querySelector('div.VfPpkd-P5QLlc') != null)
+            return false;
+    if(window.location.href.includes("calendar.google") && element.innerText == "Create new calendar" 
+        && document.querySelector('div[aria-label="Add calendar"').getAttribute("aria-expanded") == 'false')
+            return false;
+    if(window.location.href.includes("whenisgood") && element.tagName == "SELECT" && element.name.includes("Time")
+        && document.querySelector('table#jacs') && document.querySelector('table#jacs').style.visibility != 'hidden'){
+            return false;
+    }
+    if(window.location.href.includes("expedia") && document.querySelector('.uitk-calendar') && 
+        (element.getAttribute("aria-label").includes("Date") ||  element.innerText.includes("Travellers")
+        || element.innerText.includes("Going to") || element.innerText == "Search"))
+            return false;
+    if(window.location.href.includes("mail.google") && 
+        (document.querySelector(".ZF-Av") && (element.innerText == "Filters and Blocked Addresses" || element.innerText == "Create a new filter"))
+        || (document.querySelector("[role='alertdialog']") && (element.innerText.includes("label")))){
+            return false;
+    }
+    if(window.location.href.includes("youtube") && document.querySelectorAll('tp-yt-iron-dropdown').length > 0
+        && Array.from(document.querySelectorAll('tp-yt-iron-dropdown')).pop().style.display == ''
+        && (element.innerText.includes("Privacy") || element.innerText == "Create"))
+            return false;
+
+    // check visibility up to 4 levels
+    let levelsChecked = 0;
+    while (element && levelsChecked < 4) {
+        const style = window.getComputedStyle(element);
+        if (style.display === 'none' || style.visibility === 'hidden') {
+            return false;
+        }
+        
+        const rect = element.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) {    // somehow there are cases where one of them is 0 but children are visible
+          return false;
+        }
+
+        element = element.parentElement;
+        levelsChecked++;
+    }
+    return true;
 }
 
 /** 
@@ -552,16 +1055,42 @@ function setTooltipsVisibility(hideAll = false){
 */
 async function onPageLoad(){
     console.log("PAGE LOADING");
-    var mode = await readSessionStorage('mode');
+    mode = await readSessionStorage('mode');
     if((mode != undefined && mode.startsWith('write')) || mode == 'read'){
         let nextNum = Number(await readSessionStorage('num'));
         cleanSlate();
         for(let i=1; i<nextNum; i++){
             let curStep = await readSessionStorage(i.toString());
-            if(equivalentUrl(curStep['url'], window.location.href))
+            if(equivalentUrl(curStep['url'], window.location.href)){
                 injectTooltipHTML(i, curStep.css, curStep.desc, curStep['url'], curStep.queryStr);
+            }
         }
         addtopbar();
+        urlObserver.observe(document.body, { childList: true, subtree: true, attributes: true });
+        
+        // update location (gives up if not alldone after 10 checks)
+        for(var i=0; i<10; i++){
+            window.setTimeout(function(){
+                if(alldone){
+                    //console.log("relocing...");
+                    setTooltipsVisibility(reLoc = true);
+                }
+            }, 300);
+        }
+    }
+    else{
+        removetopbar();
+        urlObserver.disconnect();
+    }
+
+    // exception case: wait for search result to load in expedia
+    if(window.location.href.includes("Flights-Search")){
+        let checker = window.setInterval(function(){
+            if(document.querySelector('div div fieldset div h4')){
+                setTooltipsVisibility(reLoc = true);
+                clearInterval(checker);
+            }
+        }, 300);
     }
 }
 window.onload = onPageLoad;
@@ -574,6 +1103,19 @@ window.onload = onPageLoad;
  * @param {string} url2 
  */
 function equivalentUrl(url1, url2){
+    // exception cases
+    if(url1.includes("calendar.google.com/calendar/u/0/r/settings/calendar/")
+        && url2.includes("calendar.google.com/calendar/u/0/r/settings/calendar/")){  
+        return true
+    }
+    if(url1.includes("mail.google")){
+        if((url1.includes("/#settings/") || url1.includes("/#create-filter/")) &&
+        (url2.includes("/#settings/") || url2.includes("/#create-filter/")))
+            return true
+    }
+    url1 = url1.replace(".ca", ".com");
+    url2 = url2.replace(".ca", ".com");
+
     return url1.split("?")[0] == url2.split("?")[0]
 }
 
@@ -582,10 +1124,14 @@ function equivalentUrl(url1, url2){
  * 1. Update this page if the mode is changed in the extension's popup
  * 2. Update all tooltips, both in HTML & session storage, after deletion
  */
-chrome.storage.onChanged.addListener(async function(changes, _) {
+chrome.storage.onChanged.addListener(onChangedHandler);
+async function onChangedHandler(changes, _) {
     if('mode' in changes){
+        updatingBarTooltips = false;    // just in case
+
         let oldMode = changes['mode']['oldValue'];
         let newMode = changes['mode']['newValue'];
+        mode = newMode;
         if(newMode === 'sleep' || (oldMode != 'write-paused' && newMode === 'write')){
             cleanSlate();
         }
@@ -594,42 +1140,63 @@ chrome.storage.onChanged.addListener(async function(changes, _) {
             console.log("reading new guide", newMode)
             await onPageLoad();
         }
-        if(newMode != 'sleep')
+        if(newMode != 'sleep'){
             addtopbar();
-        else
+            urlObserver.observe(document.body, { childList: true, subtree: true, attributes: true });
+        }
+        else{
             removetopbar();
+            urlObserver.disconnect();
+        }
     }
 
     // handle tooltip deletion
-    // TODO should users be allowed to delete the tooltip while reading? should the deletions be save/discardable too? -- right now it's deletable but changes are not saved
     else if(!('num' in changes)){
         let ttID = Object.keys(changes)[0]
         if('oldValue' in changes[ttID] && !('newValue' in changes[ttID])){  // tooltip removed
-            let nextNum = Number(await readSessionStorage('num'));
-            setVariable({'num':nextNum-1})
             console.log("DELETING", ttID);
+            if(!alldone){
+                window.setTimeout(async function(){
+                    let nextNum = Number(await readSessionStorage('num'));
+                    setVariable({'num':nextNum-1});
 
-            // update tooltips after it
-            for(let i=Number(ttID)+1; i<=nextNum; i++){     // goes to nextNum just in case
-                let storedStep = await readSessionStorage(i.toString());
-                let prevNum = (i-1).toString();
-                if(storedStep != undefined){
-                    let temp = {}
-                    temp[prevNum] = storedStep;
-                    setVariable(temp);
-                }
-                let div = document.getElementById("HelpCall_"+i)
-                if(div){
-                    document.getElementById('HelpCall-ttB_'+i).id = 'HelpCall-ttB_'+prevNum
-                    div.getElementsByTagName('p')[0].textContent = prevNum;
-                    div.id = "HelpCall_"+prevNum;
-                }
-                //console.log("UPDATED STEP", prevNum, await readSessionStorage(prevNum.toString()))
+                    // update tooltips after it
+                    console.log("# tooltips", nextNum-1);
+                    for(let i=Number(ttID)+1; i<=nextNum; i++){     // goes to nextNum just in case
+                        let storedStep = await readSessionStorage(i.toString());
+                        let prevNum = (i-1).toString();
+                        if(storedStep != undefined){
+                            let temp = {}
+                            temp[prevNum] = storedStep;
+                            setVariable(temp);
+                        }
+                        let div = document.getElementById("HelpCall_"+i)
+                        if(div){
+                            document.getElementById('HelpCall-ttA_'+i).id = 'HelpCall-ttA_'+prevNum
+                            document.getElementById('HelpCall-ttB_'+i).id = 'HelpCall-ttB_'+prevNum
+                            div.getElementsByTagName('p')[0].textContent = prevNum;
+                            div.id = "HelpCall_"+prevNum;
+                            console.log("main tooltip updated", div);
+                        }
+                        //console.log("UPDATED STEP", prevNum, await readSessionStorage(prevNum.toString()))
+                    }
+                }, 750);
             }
+
+            // clean out the bar tooltips and repopulate based on storage
+            window.setTimeout(function(){
+                updateBarTooltips();
+                updateColorBarTooltips();
+            }, 1000);
+            alldone = true;
         }
-        updateBarTooltips();    // clean out the bar tooltips and repopulate based on storage
     }
-});
+
+    // handle changes while in read mode
+    if(mode == 'read'){
+        setVariable({'mode':'write-paused'});
+    }
+}
 
 /** 
  * Remove all Tooltips in this page's HTML
@@ -681,21 +1248,24 @@ function setVariable(variable){
 */
 async function create_tooltip(e) {
     // prevent a new tooltip from triggering a new mutation and a chain of tooltips
-    if(!new_event || inTooltip(e.target)){ return; }
-    new_event = false;
-
     // create a new tooltip only if in writing mode
-    let mode = await readSessionStorage('mode');
-    if(mode === undefined || mode != "write") { return; }
+    if(!new_event || inTooltip(e.target) || !mode || mode != "write"){
+        alldone = true;
+        return;
+    }
+    new_event = false;
 
     var num = await readSessionStorage('num');
     console.log("creating tooltip on ", e.cloned);
     let result = findInteractiveRole(e.target, e.cloned);
     var desc = generateDesc(result, e);
-    style = nodeToCSS(e.target, e.cloned, e.absX, absY=e.absY);
-    console.log(style);
-    injectTooltipHTML(num, style, desc, url, e.queryStr);
-    addBarTooltip(num);
+    style = nodeToCSS(e.target, e.cloned, e.absX, e.absY);
+    if(!style){     // if unable to calculate css, just don't create
+        alldone = true;
+        return;
+    }
+    injectTooltipHTML(num, style, desc, e.url, e.queryStr);
+    addBarTooltip(num, e.url);
     writeSessionTooltip(num, style, desc, e.queryStr);
     setVariable({'num':num+1});
     alldone = true;
@@ -709,13 +1279,16 @@ async function create_tooltip(e) {
  * @param {number} absY y position of the user's action (e.g., click)
  * @returns 
  */
-function nodeToCSS(node, cloned=null, absX=0, absY=0){
-    var loc = calcTooltipLoc(node, cloned, absX, absY);
-    if(scrollWithThis(node))
+function nodeToCSS(node, cloned=null, absX=null, absY=null, reLoc=null){
+    var loc = calcTooltipLoc(node, cloned, absX, absY, reLoc);
+    console.log("loc", loc);
+    if(!loc)
+        return null;
+    if(scrollWithThis(node) && node.tagName != "BODY")
         var css = 'position:absolute; ';
     else
         var css = 'position:fixed; ';
-    css += 'z-index:1000000; left:'+loc.left+'px; top:'+loc.top+'px;'
+    css += 'z-index:999999; left:'+loc.left+'px; top:'+loc.top+'px;'
     return [css, loc.dir];
 }
 
@@ -727,6 +1300,18 @@ function nodeToCSS(node, cloned=null, absX=0, absY=0){
  */
 var futureUrl;
 var callback = function(mutations){
+    for (const m of mutations) {
+        m.addedNodes.forEach(node => {
+            while(!node && node.nodeType === Node.ELEMENT_NODE && node.tagName != "BODY"){
+                if(getComputedStyle(node).position == "fixed" || getComputedStyle(node).position == "absolute"){
+                    break;
+                }
+                shiftForTopbar(node); // will explicitly make sure positioned parent of these nodes are shifted too
+                node = node.parentNode;
+            }
+        });
+    }
+    //console.log("observing")
     if(url !== window.location.href && futureUrl !== window.location.href){
         console.log("url changed");
         futureUrl = window.location.href;
@@ -736,9 +1321,15 @@ var callback = function(mutations){
         }, 1000);
     }
     setTooltipsVisibility();
+
+    // do it again if the first time was done before alldone unlocks
+    if(!alldone){
+        window.setTimeout(function(){
+            setTooltipsVisibility();
+        }, 2000);
+    }
 };
 var urlObserver = new MutationObserver(callback);
-urlObserver.observe(document.body, { childList: true, subtree: true });
 
 /** 
  * Find an element's parent Tooltip div if exists
@@ -749,7 +1340,7 @@ urlObserver.observe(document.body, { childList: true, subtree: true });
 function inTooltip( elm ) {
     var i = 0;
     while(elm.parentNode && i<5){       // stop before document or 5 levels
-        if(elm.classList.contains("HelpCallTT"))
+        if(elm.classList.contains("HelpCallTT") || elm.classList.contains("HelpCall-barTT"))
             return elm;
         i++;
         elm = elm.parentNode;
@@ -765,43 +1356,96 @@ function inTooltip( elm ) {
  * @param {Node} cloned deep copy version of the element
  * @param {number} absX default position X
  * @param {number} absY default position Y
+ * @param {string} reLoc id of tt getting relocated
  * @return {object} An object containing 'top', 'left' and 'dir' values of the Tooltip
 */
-function calcTooltipLoc( elm, cloned, absX, absY ) {
+function calcTooltipLoc( elm, cloned, absX, absY, reLoc ) {
+    const dimCut = 50;  // length/width for which tooltips should be placed outside
+    const ttOffsetX = 60;
+
     dimensions = JSON.parse(cloned.getAttribute('bounds'));
-    var y = dimensions.top;
-    var x = Math.max(0, dimensions.left - ttOffsetX + dimensions.width/2 - ttWidth/2);
-    var maxX = window.innerWidth;
-    var maxY = window.innerHeight;
-    if(scrollWithThis(elm)){
-        y += window.scrollY;
-        x += window.scrollX;
-        maxX = document.documentElement.scrollWidth;
-        maxY = document.documentElement.scrollHeight;
+    try{
+        var maxX = document.documentElement.scrollWidth;
+        var maxY = document.documentElement.scrollHeight;
+    } catch(e){
+        var maxX = window.innerWidth;
+        var maxY = window.innerHeight;
+    }
+    var baseY = dimensions.top;
+    var baseX = dimensions.left;
+    
+    let scrollParent = getScrollParent(elm);
+    if(scrollParent){
+        baseY += scrollParent.scrollTop;
+        baseX += scrollParent.scrollLeft;
     }
 
     let dir = 0;
+    let x = baseX, y = baseY;
+    let fromCursor = false;
     // if the dimension is unretrievable (e.g., with svg) or the element is too big, use mouse position instead
     if(dimensions.height == 0 && dimensions.width == 0 || 
-        y - ttHeight < 0 && y + dimensions.height + ttHeight > maxY
+        baseY - ttHeight < 0 && baseY + dimensions.height + ttHeight > maxY
         || elm === document.body){
+        if(!absY || !absX)
+            return null;
         y = absY;
         x = Math.max(0, absX - ttOffsetX - ttWidth/2);
+        fromCursor = true;
     }
-    // place below the element
-    else if(y - ttHeight < topbarHeightInt){
-        y = y + dimensions.height;
-        dir = 1;
-    }
-    // place above the element
+    // vertical
     else{
-        y = y - ttHeight
+        x = Math.max(0, baseX - ttOffsetX + dimensions.width/2 - ttWidth/2);
+        // place below the element
+        if(baseY - ttHeight < topbarHeightInt || forceBottomTT(elm)){
+            y = baseY + Math.min(dimensions.height, (dimensions.height/2)+dimCut) // 50px below the center
+            dir = 1;
+        }
+        // place above the element
+        else{
+            y = baseY - ttHeight + Math.max(0, (dimensions.height/2)-dimCut) // 50px above the center
+        }
     }
 
     // move right until it doesn't overlap with any tooltip
-    while(overlap(x, y)){        
-        x += ttWidth/2;
+    while(overlap(x, y, reLoc)){        
+        x += 7;
     }
+
+    // overwrite with horizontal if it fits (bubble width = 140)
+    if(allowHorizontal(elm) && !forceBottomTT(elm) && !fromCursor && x + dimensions.width + 150 < maxX){
+        let tempy = Math.max(0, baseY + dimensions.height/2 - 30);
+        let tempx = baseX + dimensions.width - 35;
+
+        // try only one shift, otherwise just keep it vertical
+        if(overlap(tempx,tempy,reLoc,true)){
+            tempy += 7;
+            if(window.location.href.includes("whenisgood") && elm.tagName == "TD")
+                tempy += ttWidth;
+        }
+
+        if(!overlap(tempx,tempy,reLoc,true)){
+            x = tempx;
+            y = tempy;
+            dir = 2;
+
+            // exception case
+            if(window.location.href.includes("whenisgood") || window.location.href.includes("google")){
+                x = tempx - 20;
+                y = tempy;
+                dir = 2;
+            }
+        }
+    }
+
+    // exception: move left to avoid covering "one-way"
+    if(window.location.href.includes("expedia") && elm.getAttribute("data-stid") == "origin_select-menu-trigger" && dir < 2){
+        x -= ttWidth*2;
+    }
+    if(window.location.href.includes("calendar") && elm.textContent.includes("muitanprasert@gmail.com")){
+        x += 100;
+    }
+
     return { top: y, left: x, dir: dir };
 
     // TODO be more strategic with the positioning not to cover anything incl. other tooltips (or add some opacity with hover effects)
@@ -809,17 +1453,57 @@ function calcTooltipLoc( elm, cloned, absX, absY ) {
 }
 
 /**
+ * Check exception cases for horizontal tooltips
+ */
+function allowHorizontal(elm){
+    let thisUrl = window.location.href;
+    // twitter & expedia
+    if(thisUrl.includes("twitter") || thisUrl.includes("expedia")){
+        return false;
+    }
+    // youtube search bar
+    if(thisUrl.includes("youtube") && elm.name == "search_query"){
+        return false;
+    }
+    return true;
+}
+
+function forceBottomTT(elm){
+    let thisUrl = window.location.href;
+
+    // whenisgood
+    if(thisUrl.includes("whenisgood") && (elm.tagName=="SELECT" || elm.name=="duration")){
+        return true;
+    }
+    return false;
+}
+
+/**
  * Check if the given coordinates overlap with any existing tooltips
  * @param {number} x 
  * @param {number} y 
+ * @param {string} reLoc id of tt getting relocated, null if not relocating
+ * @param {boolean} horizontal
  */
-function overlap(x, y){
+function overlap(x, y, reLoc, horizontal=false){
     var TTs = document.querySelectorAll('div.HelpCallTT');
     var overlapped = false;
-    TTs.forEach(function(tt){
-        ttBounds = tt.getBoundingClientRect();
-        overlapped = overlapped || (Math.abs(x-ttBounds.left) < ttWidth) && (Math.abs(y-ttBounds.top) < ttHeight);
-    });
+    if(horizontal){
+        TTs.forEach(function(tt){
+            if(reLoc != tt.id){
+                ttBounds = tt.getBoundingClientRect();
+                overlapped = overlapped || (Math.abs(x-ttBounds.left) < ttHeight) && (Math.abs(y-(ttBounds.top+window.scrollY)) < ttWidth);
+            }
+        });
+    }
+    else{
+        TTs.forEach(function(tt){
+            if(reLoc != tt.id){
+                ttBounds = tt.getBoundingClientRect();
+                overlapped = overlapped || (Math.abs(x-ttBounds.left) < ttWidth) && (Math.abs(y-(ttBounds.top+window.scrollY)) < ttHeight);
+            }
+        });
+    }
     return overlapped
 }
 
@@ -838,25 +1522,16 @@ function getScrollParent(element, includeHidden = false) {
         return scrollWithThis(element);
     let scrollParent = null;
     for(var parent = element.parentElement; !scrollParent; parent = parent.parentElement){
-        if(!parent)
-            return null;
+        if(!parent){
+            return scrollParent;
+        }
         scrollParent = scrollWithThis(element, parent);
     }
-    return scrollParent;
-    /*var style = getComputedStyle(element);
-    var excludeStaticParent = style.position === "absolute";
-    var overflowRegex = includeHidden ? /(auto|scroll|hidden)/ : /(auto|scroll)/;
 
-    
-    for (var parent = element; (parent = parent.parentElement);) {
-        style = getComputedStyle(parent);
-        if (excludeStaticParent && style.position === "static") {
-            continue;
-        }
-        if (overflowRegex.test(style.overflow + style.overflowY + style.overflowX)) return parent;
+    if(scrollParent && scrollParent.getAttribute("aria-hidden")){
+        return getScrollParent(scrollParent);
     }
-
-    return scrollWithThis(element);*/
+    return scrollParent;
 }
 
 /** 
@@ -869,8 +1544,18 @@ function scrollWithThis ( elm, parent=document.scrollingElement ) {
     parent.scrollBy(1,1);
     after = elm.getBoundingClientRect();
     parent.scrollBy(-1,-1);
-    if(before.top != after.top || before.left != after.left)
+    if(before.top != after.top || before.left != after.left){
         return parent;
+    }
+
+    before = elm.getBoundingClientRect();
+    parent.scrollBy(-1,-1);
+    after = elm.getBoundingClientRect();
+    parent.scrollBy(1,1);
+    if(before.top != after.top || before.left != after.left){
+        return parent;
+    }
+
     return null;
 }
 
@@ -882,23 +1567,22 @@ function scrollWithThis ( elm, parent=document.scrollingElement ) {
  * @return {string}
 */
 function generateDesc(obj, e){
+    //console.log("Generating desc from", obj, e);
     let desc = 'Click'
     if(e.eventType == 'd')
         desc = 'Double-click'
     else if(e.eventType == 'r')
-        desc = 'Right (secondary) click on'
+        desc = 'Right-click on'
     else if(e.eventType == 'k')
-        desc = 'Enter/select with'
+        desc = 'Select with'
     else if(e.eventType == 's'){
         // special case, no target desc (but positioned there)
         return 'Press  '+e.code;    // if e isn't passed we get an error
     }
-    let visible_text = ''
-    if(e.cloned.innerText != undefined)
-        visible_text = e.cloned.innerText.trim();
-    else if(obj.elm.innerText != undefined)     // try the parent's text instead
-        visible_text = obj.elm.innerText.trim();
-    if(visible_text != '' && e.eventType != 'k' && obj.elm != document.body){
+    let visible_text = findTextDescendant(e.cloned);
+    if(visible_text  == '')         // try the parent's text instead
+        visible_text = findTextDescendant(obj.elm);
+    if(visible_text != '' && e.eventType != 'k'){
         words = visible_text.split(" ")
         if(words.length > 4)
             visible_text = words.slice(0,4).join(" ")+"..."; // take first 4 words
@@ -911,9 +1595,54 @@ function generateDesc(obj, e){
     }
     if(obj.role != '')
         desc += " "+obj.role
-    return desc;
+    
+    if(desc.includes("text")){
+        desc = desc.replace("Select with", "Type into");
+        desc = desc.replace("Click", "Click & type into")
+    }
+    return desc+" ";
 }
 
+/**
+ * Find the closest descendant with a text content
+ * @param {*} node 
+ * @returns text value or null if found none or too many
+ */
+function findTextDescendant(node) {
+    if(node == undefined || node.childNodes == undefined || node.childNodes.length == 0){
+        return ''
+    }
+
+    // iterate over the child nodes of the parent node
+    let textNodes = [];
+    node.childNodes.forEach(childNode => {
+        if (childNode.nodeType === Node.TEXT_NODE && 
+            childNode.textContent.trim() !== '' &&
+            !childNode.textContent.includes('_')         // most often not meant to be visible
+        ){
+            textNodes.push(childNode.textContent.trim());
+        }
+    });
+
+    // recursively search its descendants if not found
+    if(textNodes.length == 0){
+        node.childNodes.forEach(childNode => {
+            let result = findTextDescendant(childNode);
+            if(result != '')
+                textNodes.push(result)
+        });
+    }
+
+    if(textNodes.length == 1){   // found an exact hit
+        if(textNodes[0].textContent == undefined)
+            return textNodes[0];
+        else
+            return textNodes[0].textContent.trim();
+    }
+    else                        // found too many on the same level or none at all
+        return '';
+}
+  
 /** 
  * Find an element's parent Tooltip div if exists
  * 
@@ -923,7 +1652,14 @@ function generateDesc(obj, e){
 function findInteractiveRole(el, initEl){
     if(el == null || el.parentNode == null) // stop before document
         return { elm: document.body, role:''};  // return body to just use the click's location directly
-
+    
+    // check by role (explicit)
+    includedAttr.forEach(attr => {
+        if(el.hasAttribute(attr)){
+            return { elm: el, role: el.getAttribute(attr) };
+        }
+    })
+    
     // check by nodeName (implicit)
     nodeName = el.nodeName.toLowerCase();
     if(nodeName in interactive_nodes){
@@ -932,20 +1668,13 @@ function findInteractiveRole(el, initEl){
                 return { elm: initEl, role:''};
         }
         if(nodeName == 'input'){
-            if(!el.hasAttribute('type'))
-                return { elm: el, role:'text field'};
+            if(!el.hasAttribute('type') || el['type']=="text")
+                return { elm: el, role:'textbox'};
             if(el['type'] == 'hidden')
                 return { elm: initEl, role:''};
             return { elm: el, role: el['type'] + ' input field' };
         }
         return { elm: el, role: interactive_nodes[nodeName]['name'] };
-    }
-
-    // check by role (explicit)
-    if(el.hasAttribute("role")){
-        if(interactive_roles.includes(el["role"])){
-            return { elm: el, role: el["role"] };
-        }
     }
 
     // check parent recursively
@@ -972,16 +1701,6 @@ function inModal(el) {
 }
 
 // ====== NO LONGER IN USE =====
-// observe page mutations from https://stackoverflow.com/a/50493861
-var targetNode = document.body;
-var config = { attributes: true, childList: true, subtree: true };     // options (which mutations to observe)
-var callback = function(mutationsList) {                // callback function to execute when mutations are observed
-    window.setTimeout(create_tooltip, 100);
-};
-var observer = new MutationObserver(callback);          // an observer instance linked to the callback function
-//observer.observe(targetNode, config);                   // start observing the target node for configured mutations
-// observer.disconnect();
-
 function sleep(ms) {
     return new Promise(resolve => window.setTimeout(resolve, ms));
 }

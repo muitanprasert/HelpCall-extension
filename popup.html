@@ -108,6 +108,14 @@
       .inline-option:hover {
         background: #f0e7f1;
       }
+      button.inactive {
+        display: none;
+      }
+      button.astext, button.astext:hover {
+        cursor: none;
+        background: transparent;
+        border: none;
+      }
 
     </style>
   </head>
@@ -125,6 +133,7 @@
       <button class="inline-button" id="save-button" style="width:56%; float:left;">Save Steps</button>
       <button class="inline-button" id="discard-button" style="width:41%; float:right;">Discard</button>
     </div>
+    <button id="update-guide" class="inline-button inactive" style="margin-bottom: 6px;">Save changes</button>
     <button id="delimiter">Start recording</button>
 
     <script src="popup.js"></script>
